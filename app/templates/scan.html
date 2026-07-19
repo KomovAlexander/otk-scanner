@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Сканирование документа — ОТК</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body class="scan-body">
+
+    <div class="scan-container">
+
+        <!-- Заголовок -->
+        <div class="scan-header">
+            <h1>Давай начнём испытания?</h1>
+            <p>Сфотографируйте сопроводительный лист. Система заполнит данные автоматически.</p>
+        </div>
+
+        <!-- Зона захвата -->
+        <div class="capture-zone" id="captureZone">
+            <div class="preview-area" id="previewArea">
+                <span class="camera-icon">📷</span>
+                <p>Нажмите чтобы сделать фото или перетащите файл</p>
+            </div>
+
+            <!-- Форма загрузки -->
+            <form id="uploadForm" enctype="multipart/form-data">
+                <input type="file"
+                       id="fileInput"
+                       name="file"
+                       accept="image/*"
+                       capture="environment"
+                       hidden>
+            </form>
+
+            <button class="btn-capture" id="captureBtn">
+                📷 Сделать фото
+            </button>
+            <label for="fileInput" class="btn-upload">
+                📁 Или загрузить файл
+            </label>
+        </div>
+
+        <!-- Результат (скрыт изначально) -->
+        <div class="result-card" id="resultCard" style="display: none;">
+            <div class="scanning-animation" id="scanAnimation">
+                <div class="scan-line"></div>
+                <p>Идет распознавание… Анализ ячеек… Поиск номера заказа…</p>
+            </div>
+
+            <div class="result-data" id="resultData" style="display: none;">
+                <h2>Проверьте данные:</h2>
+
+                <div class="field-row">
+                    <span class="field-icon">📄</span>
+                    <span class="field-label">Заказ №</span>
+                    <input type="text" id="orderNumber" class="field-value" readonly>
+                </div>
+
+                <div class="field-row">
+                    <span class="field-icon">🏭</span>
+                    <span class="field-label">Подразделение</span>
+                    <input type="text" id="department" class="field-value" readonly>
+                </div>
+
+                <div class="field-row">
+                    <span class="field-icon">⚙️</span>
+                    <span class="field-label">Изделие</span>
+                    <input type="text" id="productName" class="field-value" readonly>
+                </div>
+
+                <div class="field-row">
+                    <span class="field-icon">🏷️</span>
+                    <span class="field-label">Серийный номер</span>
+                    <input type="text" id="serialNumber" class="field-value serial" readonly>
+                </div>
+
+                <div class="confidence-bar">
+                    <span>Уверенность распознавания:</span>
+                    <span id="confidenceValue">0%</span>
+                </div>
+
+                <p class="confirm-question">Данные на фото совпадают?</p>
+                <div class="action-buttons">
+                    <button class="btn-primary" id="confirmYes">Да, всё верно. Продолжить →</button>
+                    <button class="btn-secondary" id="confirmNo">Нет, внести вручную</button>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        // Логика загрузки фото и отправки на сервер
+        const fileInput = document.getElementById('fileInput');
+        const captureBtn = document.getElementById('captureBtn');
+        const resultCard = document.getElementById('resultCard');
+        const scanAnimation = document.getElementById('scanAnimation');
+        const resultData = document.getElementById('resultData');
+
+        // Кнопка "Сделать фото" открывает камеру
+        captureBtn.addEventListener('click', () => fileInput.click());
+
+        // При выборе файла — отправляем на сервер
+        fileInput.addEventListener('change', () => {
+            const file = fileInput.files[0];
+            if (!file) return;
+
+            // Показываем превью
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                document.getElementById('previewArea').innerHTML =
+                    `<img src="${e.target.result}" alt="Фото документа">`;
+            };
+            reader.readAsDataURL(file);
+
+            // Показываем анимацию сканирования
+            resultCard.style.display = 'block';
+            scanAnimation.style.display = 'block';
+            resultData.style.display = 'none';
+
+            // Отправляем на сервер
+            const formData = new FormData();
+            formData.append('file', file);
+
+            fetch('/api/scan', { method: 'POST', body: formData })
+                .then(res => res.json())
+                .then(data => {
+                    // Скрываем анимацию, показываем результат
+                    scanAnimation.style.display = 'none';
+                    resultData.style.display = 'block';
+
+                    document.getElementById('orderNumber').value = data.order_number;
+                    document.getElementById('department').value = data.department;
+                    document.getElementById('productName').value = data.product_name;
+                    document.getElementById('serialNumber').value = data.serial_number;
+                    document.getElementById('confidenceValue').textContent =
+                        Math.round(data.confidence * 100) + '%';
+                })
+                .catch(err => {
+                    alert('Ошибка распознавания: ' + err);
+                });
+        });
+    </script>
+
+</body>
+</html>
