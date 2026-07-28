@@ -23,8 +23,6 @@
                 <p>Нажмите чтобы сделать фото или перетащите файл</p>
             </div>
 
-            <!-- Форма загрузки -->
-            <form id="uploadForm" enctype="multipart/form-data">
             <input type="file" id="cameraInput" name="file" accept="image/*" capture="environment" hidden>
             <input type="file" id="galleryInput" name="file" accept="image/*" hidden>
 
@@ -45,19 +43,19 @@
                 <div class="field-row">
                     <span class="field-icon">📄</span>
                     <span class="field-label">Заказ №</span>
-                    <input type="text" id="orderNumber" class="field-value" readonly>
+                    <input type="text" id="orderNumber" class="field-value" onfocus="this.blur()">
                 </div>
 
                 <div class="field-row">
                     <span class="field-icon">🏭</span>
                     <span class="field-label">Подразделение</span>
-                    <input type="text" id="department" class="field-value" readonly>
+                    <input type="text" id="department" class="field-value" onfocus="this.blur()">
                 </div>
 
                 <div class="field-row">
                     <span class="field-icon">⚙️</span>
                     <span class="field-label">Изделие</span>
-                    <input type="text" id="productName" class="field-value" readonly>
+                    <input type="text" id="productName" class="field-value" onfocus="this.blur()">
                 </div>
 
                 <div class="confidence-bar">
@@ -125,6 +123,16 @@
                         alert('Ошибка распознавания: ' + err);
                     });
             });
+        });
+
+        // Нет, внести вручную
+        document.getElementById('confirmNo').addEventListener('click', () => {
+            const fields = ['orderNumber', 'department', 'productName'];
+            fields.forEach(id => {
+                const input = document.getElementById(id);
+                input.removeAttribute('onfocus');
+            });
+            document.getElementById('confirmNo').style.display = 'none';
         });
     </script>
 

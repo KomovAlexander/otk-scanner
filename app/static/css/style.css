@@ -12,96 +12,7 @@ body {
     min-height: 100vh;
 }
 
-/* ── Приветственная страница ───────────── */
-.welcome-body {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.welcome-container {
-    display: flex;
-    width: 900px;
-    height: 550px;
-    border-radius: 16px;
-    overflow: hidden;
-    box-shadow: 0 20px 60px rgba(0,0,0,0.5);
-}
-
-.welcome-left {
-    width: 40%;
-    background: #14161a;
-    padding: 50px 30px;
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-}
-
-.logo-icon {
-    font-size: 48px;
-    display: block;
-    margin-bottom: 10px;
-}
-
-.logo-block h1 {
-    font-size: 28px;
-    font-weight: 700;
-    letter-spacing: 2px;
-    color: #ff6b35;
-}
-
-.status-block {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    font-size: 13px;
-    color: #888;
-    margin-bottom: 8px;
-}
-
-.status-dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: #555;
-}
-
-.status-dot.online {
-    background: #4caf50;
-    box-shadow: 0 0 8px #4caf50;
-}
-
-.welcome-right {
-    width: 60%;
-    background: #1e2128;
-    padding: 50px 40px;
-    display: flex;
-    align-items: center;
-}
-
-.login-card {
-    width: 100%;
-}
-
-.login-card h2 {
-    font-size: 22px;
-    margin-bottom: 5px;
-}
-
-.subtitle {
-    color: #888;
-    margin-bottom: 30px;
-    font-size: 14px;
-}
-
-label {
-    display: block;
-    font-size: 13px;
-    color: #aaa;
-    margin-bottom: 6px;
-    margin-top: 16px;
-}
-
+/* ── Общие элементы ───────────────────── */
 input[type="text"],
 input[type="password"] {
     width: 100%;
@@ -120,9 +31,7 @@ input:focus {
 }
 
 .btn-primary {
-    width: 100%;
     padding: 14px;
-    margin-top: 24px;
     background: #ff6b35;
     color: #fff;
     border: none;
@@ -137,11 +46,22 @@ input:focus {
     background: #e55a2b;
 }
 
-.footer-note {
-    margin-top: 20px;
-    font-size: 11px;
-    color: #555;
-    text-align: center;
+.btn-secondary {
+    padding: 12px 20px;
+    background: #2a2d35;
+    color: #ccc;
+    border: 1px solid #3a3d45;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+label {
+    display: block;
+    font-size: 13px;
+    color: #aaa;
+    margin-bottom: 6px;
+    margin-top: 16px;
 }
 
 /* ── Страница сканирования ─────────────── */
@@ -281,12 +201,6 @@ input:focus {
     font-size: 15px;
 }
 
-.field-value.serial {
-    color: #ff6b35;
-    font-weight: 600;
-    letter-spacing: 1px;
-}
-
 .confidence-bar {
     margin: 16px 0;
     font-size: 13px;
@@ -307,16 +221,6 @@ input:focus {
 .action-buttons {
     display: flex;
     gap: 12px;
-}
-
-.btn-secondary {
-    padding: 12px 20px;
-    background: #2a2d35;
-    color: #ccc;
-    border: 1px solid #3a3d45;
-    border-radius: 8px;
-    cursor: pointer;
-    font-size: 14px;
 }
 
 /* ── Мобильная адаптация ─────────────────── */
