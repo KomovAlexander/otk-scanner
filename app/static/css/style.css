@@ -318,3 +318,48 @@ input:focus {
     cursor: pointer;
     font-size: 14px;
 }
+
+/* ── Мобильная адаптация ─────────────────── */
+@media (max-width: 768px) {
+    .scan-container {
+        width: 100%;
+        padding: 0 10px;
+    }
+
+    .scan-header h1 {
+        font-size: 22px;
+    }
+
+    .capture-zone {
+        padding: 20px 15px;
+    }
+
+    .camera-icon {
+        font-size: 48px;
+    }
+
+    .field-row {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 6px;
+    }
+
+    .field-label {
+        width: 100%;
+    }
+
+    .action-buttons {
+        flex-direction: column;
+    }
+
+    .btn-capture,
+    .btn-upload {
+        display: block;
+        width: 100%;
+        margin: 6px 0;
+    }
+
+    .result-card {
+        padding: 20px 15px;
+    }
+}

@@ -13,7 +13,7 @@
         <!-- Заголовок -->
         <div class="scan-header">
             <h1>Давай начнём испытания?</h1>
-            <p>Сфотографируйте сопроводительный лист. Система заполнит данные автоматически.</p>
+            <p>Сфотографируйте заказ на производство. Система заполнит данные автоматически.</p>
         </div>
 
         <!-- Зона захвата -->
@@ -25,20 +25,11 @@
 
             <!-- Форма загрузки -->
             <form id="uploadForm" enctype="multipart/form-data">
-                <input type="file"
-                       id="fileInput"
-                       name="file"
-                       accept="image/*"
-                       capture="environment"
-                       hidden>
-            </form>
+            <input type="file" id="cameraInput" name="file" accept="image/*" capture="environment" hidden>
+            <input type="file" id="galleryInput" name="file" accept="image/*" hidden>
 
-            <button class="btn-capture" id="captureBtn">
-                📷 Сделать фото
-            </button>
-            <label for="fileInput" class="btn-upload">
-                📁 Или загрузить файл
-            </label>
+            <button class="btn-capture" id="captureBtn">📷 Сделать фото</button>
+            <label for="galleryInput" class="btn-upload">📁 Или загрузить файл</label>
         </div>
 
         <!-- Результат (скрыт изначально) -->
@@ -69,12 +60,6 @@
                     <input type="text" id="productName" class="field-value" readonly>
                 </div>
 
-                <div class="field-row">
-                    <span class="field-icon">🏷️</span>
-                    <span class="field-label">Серийный номер</span>
-                    <input type="text" id="serialNumber" class="field-value serial" readonly>
-                </div>
-
                 <div class="confidence-bar">
                     <span>Уверенность распознавания:</span>
                     <span id="confidenceValue">0%</span>
@@ -91,55 +76,55 @@
     </div>
 
     <script>
-        // Логика загрузки фото и отправки на сервер
-        const fileInput = document.getElementById('fileInput');
+        const cameraInput = document.getElementById('cameraInput');
+        const galleryInput = document.getElementById('galleryInput');
         const captureBtn = document.getElementById('captureBtn');
         const resultCard = document.getElementById('resultCard');
         const scanAnimation = document.getElementById('scanAnimation');
         const resultData = document.getElementById('resultData');
 
         // Кнопка "Сделать фото" открывает камеру
-        captureBtn.addEventListener('click', () => fileInput.click());
+        captureBtn.addEventListener('click', () => cameraInput.click());
 
-        // При выборе файла — отправляем на сервер
-        fileInput.addEventListener('change', () => {
-            const file = fileInput.files[0];
-            if (!file) return;
+        // Обработчик для обоих input'ов (камера и галерея)
+        [cameraInput, galleryInput].forEach(input => {
+            input.addEventListener('change', () => {
+                const file = input.files[0];
+                if (!file) return;
 
-            // Показываем превью
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                document.getElementById('previewArea').innerHTML =
-                    `<img src="${e.target.result}" alt="Фото документа">`;
-            };
-            reader.readAsDataURL(file);
+                // Показываем превью
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    document.getElementById('previewArea').innerHTML =
+                        `<img src="${e.target.result}" alt="Фото документа">`;
+                };
+                reader.readAsDataURL(file);
 
-            // Показываем анимацию сканирования
-            resultCard.style.display = 'block';
-            scanAnimation.style.display = 'block';
-            resultData.style.display = 'none';
+                // Показываем анимацию сканирования
+                resultCard.style.display = 'block';
+                scanAnimation.style.display = 'block';
+                resultData.style.display = 'none';
 
-            // Отправляем на сервер
-            const formData = new FormData();
-            formData.append('file', file);
+                // Отправляем на сервер
+                const formData = new FormData();
+                formData.append('file', file);
 
-            fetch('/api/scan', { method: 'POST', body: formData })
-                .then(res => res.json())
-                .then(data => {
-                    // Скрываем анимацию, показываем результат
-                    scanAnimation.style.display = 'none';
-                    resultData.style.display = 'block';
+                fetch('/api/scan', { method: 'POST', body: formData })
+                    .then(res => res.json())
+                    .then(data => {
+                        scanAnimation.style.display = 'none';
+                        resultData.style.display = 'block';
 
-                    document.getElementById('orderNumber').value = data.order_number;
-                    document.getElementById('department').value = data.department;
-                    document.getElementById('productName').value = data.product_name;
-                    document.getElementById('serialNumber').value = data.serial_number;
-                    document.getElementById('confidenceValue').textContent =
-                        Math.round(data.confidence * 100) + '%';
-                })
-                .catch(err => {
-                    alert('Ошибка распознавания: ' + err);
-                });
+                        document.getElementById('orderNumber').value = data.order_number;
+                        document.getElementById('department').value = data.department;
+                        document.getElementById('productName').value = data.product_name;
+                        document.getElementById('confidenceValue').textContent =
+                            Math.round(data.confidence * 100) + '%';
+                    })
+                    .catch(err => {
+                        alert('Ошибка распознавания: ' + err);
+                    });
+            });
         });
     </script>
 

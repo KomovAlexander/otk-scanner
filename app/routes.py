@@ -32,6 +32,5 @@ async def api_scan(file: UploadFile = File(...)):
         "order_number": result.get("order_number", "НЕ РАСПОЗНАНО"),
         "product_name": result.get("product_name", "НЕ РАСПОЗНАНО"),
         "department": result.get("department", "НЕ РАСПОЗНАНО"),
-        "serial_number": result.get("serial_number", ""),
         "confidence": result.get("confidence", 0.0)
     })

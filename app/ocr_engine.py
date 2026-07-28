@@ -46,7 +46,7 @@ def scan_document(image_path: str) -> dict:
 
     response = requests.post(url, json=body, headers=headers)
     print("STATUS:", response.status_code)
-    
+
     if response.status_code != 200:
         print("ERROR:", response.text)
         return {
@@ -59,7 +59,7 @@ def scan_document(image_path: str) -> dict:
         }
 
     data = response.json()
-    
+
     # Выведем полный ответ Яндекса
     print("ОТВЕТ Яндекс:")
     print(json.dumps(data, indent=2, ensure_ascii=False)[:2000])
@@ -99,12 +99,20 @@ def scan_document(image_path: str) -> dict:
         }
 
     # ── 1. Номер заказа ──────────────────────────
+    # Ищем ПС00-XXXX.X.X — это всегда номер заказа
     order_match = re.search(
-        r"Задание на производство\s*[№N]?\s*([A-Za-zА-Яа-я0-9.\-]+)",
-        recognized_text,
-        re.IGNORECASE,
+        r"ПС\d{2}[.\-]\d{2,4}[.\-]\d{1,2}(?:[.\-]\d{1,3})?",
+        recognized_text, re.IGNORECASE,
     )
-    order_number = order_match.group(1).strip() if order_match else "НЕ НАЙДЕНО"
+    if order_match:
+        order_number = order_match.group(0).replace('-', '.')
+    else:
+        # Запасной: "Задание на производство № ..."
+        order_match = re.search(
+            r"(?:Задание\s+)?(?:на|Hа)\s+производство\s*[№N]?\s*([A-Za-zА-Яа-я0-9.\-]+)",
+            recognized_text, re.IGNORECASE,
+        )
+        order_number = order_match.group(1).strip() if order_match else "НЕ НАЙДЕНО"
 
     # ── 2. Подразделение ─────────────────────────
     dept_match = re.search(
@@ -120,31 +128,15 @@ def scan_document(image_path: str) -> dict:
         recognized_text,
         re.IGNORECASE,
     )
-    product_name = product_match.group(1).strip() if product_match else "НЕ НАЙДЕНО"
+    product_name = product_match.group(
+        1).strip() if product_match else "НЕ НАЙДЕНО"
 
-    # ── 5. Серийный номер ────────────────────────
-    # Формат: 0***ДДММГГГГ01
-    serial_number = ""
-    if order_number != "НЕ НАЙДЕНО":
-        ps_match = re.search(r"ПС\d{2}[.\-](\d{3,4})", order_number, re.IGNORECASE)
-        if ps_match:
-            ps_code = ps_match.group(1)  # "788"
-            # Добиваем до 4 цифр нулями слева: 0788
-            ps_code = ps_code.zfill(4)
-        else:
-            ps_code = "0000"
-
-        from datetime import datetime
-        date_part = datetime.now().strftime("%d%m%y")  # 19072026
-        serial_number = f"{ps_code}{date_part}01"
-
-
-    print(f"\n>>> РЕЗУЛЬТАТ: заказ={order_number}, отдел={department}, изделие={product_name}, серийный={serial_number}")
+    print(
+        f"\n>>> РЕЗУЛЬТАТ: заказ={order_number}, отдел={department}, изделие={product_name}")
 
     return {
         "order_number": order_number,
         "product_name": product_name,
         "department": department,
-        "serial_number": serial_number,
         "confidence": 0.99,
     }
