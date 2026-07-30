@@ -177,7 +177,30 @@
                 <p>Идет распознавание…</p>
             </div>
             <div class="result-data" id="resultData" style="display: none;">
-                <h2>Найденные размеры:</h2>
+                <h2>Проверьте данные:</h2>
+                
+                <div class="field-row">
+                    <span class="field-icon">📄</span>
+                    <span class="field-label">Номер ГЧ</span>
+                    <input type="text" id="gchNumber" class="field-value" onfocus="this.blur()">
+                </div>
+                
+                <div class="field-row">
+                    <span class="field-icon">⚙️</span>
+                    <span class="field-label">Изделие</span>
+                    <input type="text" id="gchProduct" class="field-value" onfocus="this.blur()">
+                </div>
+                <div class="field-row">
+                    <span class="field-icon">🎨</span>
+                    <span class="field-label">RAL</span>
+                    <input type="text" id="gchRal" class="field-value" 
+                           onfocus="this.removeAttribute('onfocus')"
+                           oninput="validateRal(this)"
+                           maxlength="4"
+                           placeholder="Например: 6009">
+                </div>
+
+                <h3 style="margin-top: 20px;">📏 Габаритные размеры:</h3>
                 <div id="numbersList"></div>
                 <button class="btn-add" onclick="addManual()">+ Добавить размер вручную</button>
                 <button class="btn-next" onclick="goNext()">Далее →</button>
@@ -220,6 +243,12 @@
                     .then(data => {
                         scanAnimation.style.display = 'none';
                         resultData.style.display = 'block';
+                        
+                        // Заполняем номер ГЧ и изделие
+                        document.getElementById('gchNumber').value = data.gch_number || 'НЕ НАЙДЕНО';
+                        document.getElementById('gchProduct').value = data.found_product || 'НЕ НАЙДЕНО';
+                        document.getElementById('gchRal').value = data.ral || 'НЕ НАЙДЕНО';                      
+                        // Размеры
                         currentNumbers = data.numbers || [];
                         renderNumbers();
                     })
@@ -256,13 +285,11 @@
         function addManual() {
             currentNumbers.push('');
             renderNumbers();
-            // Фокус на последний input
             const inputs = document.querySelectorAll('.number-input');
             if (inputs.length > 0) inputs[inputs.length - 1].focus();
         }
 
         function goNext() {
-            // Убираем пустые
             currentNumbers = currentNumbers.filter(n => n.trim());
             if (currentNumbers.length === 0) {
                 alert('Добавьте хотя бы один размер!');
@@ -270,6 +297,14 @@
             }
             alert('✅ Размеры сохранены: ' + currentNumbers.join(', ') + '\nСледующий шаг — проверка Г3 (будет добавлен позже).');
         }
+        function validateRal(input) {
+            // Удаляем всё кроме цифр
+            input.value = input.value.replace(/[^0-9]/g, '');
+            // Ограничиваем 4 символами
+            if (input.value.length > 4) {
+                input.value = input.value.slice(0, 4);
+            }
+        }        
     </script>
 </body>
 </html>

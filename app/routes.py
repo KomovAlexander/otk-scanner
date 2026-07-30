@@ -36,6 +36,8 @@ async def api_scan(file: UploadFile = File(...)):
     })
 
 # ── Страница сканирования ГЧ ──────────────────────
+
+
 @router.get("/check-gch")
 def check_gch_page(request: Request):
     return templates.TemplateResponse("check_gch.html", {"request": request})
@@ -45,8 +47,7 @@ def check_gch_page(request: Request):
 async def api_scan_gch(file: UploadFile = File(...)):
     upload_dir = "app/static/uploads"
     os.makedirs(upload_dir, exist_ok=True)
-    
-    # Сохраняем с латинским именем
+
     import uuid
     safe_name = f"gch_{uuid.uuid4().hex[:8]}.jpg"
     file_path = os.path.join(upload_dir, safe_name)
@@ -54,11 +55,47 @@ async def api_scan_gch(file: UploadFile = File(...)):
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
 
+    # Автовыравнивание
+    from app.ocr_engine import perspective_correction
+    perspective_correction(file_path)
+
+    # Распознаём текст
+    from app.ocr_engine import scan_document
+    import re
+
+    result = scan_document(file_path)
+    full_text = result.get("full_text", "")
+
+    # Ищем номер ГЧ (например: В1-0169.000.000 ГЧ)
+    gch_match = re.search(
+        r"([A-ZА-Я]{1,2}\d{1,2}[.\-]\d{3,4}[.\-]\d{3,4}[.\-]\d{3,4}\s*ГЧ)",
+        full_text, re.IGNORECASE,
+    )
+    gch_number = gch_match.group(1).strip() if gch_match else "НЕ НАЙДЕНО"
+
+    # Ищем изделие (CTR-KV-...)
+    product_match = re.search(
+        r"CTR[.\-\s]?KV[.\-\s]?[A-ZА-Я0-9.\-]{2,}",
+        full_text, re.IGNORECASE,
+    )
+    found_product = product_match.group(
+        0).strip() if product_match else "НЕ НАЙДЕНО"
+
+    # Извлекаем размеры
     from app.green_extractor import extract_all_colored_numbers
     numbers = extract_all_colored_numbers(file_path)
+    # Ищем RAL (например: RAL6009)
+    ral_match = re.search(
+        r"RAL\s*(\d{4})",
+        full_text, re.IGNORECASE,
+    )
+    ral = ral_match.group(1).strip() if ral_match else ""
 
     return JSONResponse(content={
         "status": "ok",
+        "gch_number": gch_number,
+        "found_product": found_product,
+        "ral": ral,
         "numbers": numbers,
         "count": len(numbers),
     })

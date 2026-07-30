@@ -44,7 +44,8 @@ def perspective_correction(image_path):
     edges = cv2.Canny(blur, 50, 150)
 
     # Ищем контуры
-    contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    contours, _ = cv2.findContours(
+        edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
     if not contours:
         print("⚠️ Контуры не найдены")
@@ -52,28 +53,28 @@ def perspective_correction(image_path):
 
     # Ищем самый большой контур (весь лист)
     largest = max(contours, key=cv2.contourArea)
-    
+
     # Находим минимальный прямоугольник, охватывающий контур
     rect = cv2.minAreaRect(largest)
     angle = rect[2]
-    
+
     # Корректируем угол
     if angle < -45:
         angle += 90
-    
+
     # Расширяем холст чтобы при повороте не обрезалось
     diagonal = int(np.sqrt(h**2 + w**2))
     expanded = np.ones((diagonal, diagonal, 3), dtype=np.uint8) * 255
-    
+
     # Вставляем оригинал в центр расширенного холста
     y_offset = (diagonal - h) // 2
     x_offset = (diagonal - w) // 2
     expanded[y_offset:y_offset+h, x_offset:x_offset+w] = img
-    
+
     # Поворачиваем расширенное изображение
     center = (diagonal // 2, diagonal // 2)
     M = cv2.getRotationMatrix2D(center, angle, 1.0)
-    rotated = cv2.warpAffine(expanded, M, (diagonal, diagonal), 
+    rotated = cv2.warpAffine(expanded, M, (diagonal, diagonal),
                              borderMode=cv2.BORDER_CONSTANT, borderValue=(255, 255, 255))
 
     # Обрезаем белые края после поворота
@@ -168,10 +169,11 @@ def scan_document(image_path: str) -> dict:
 
     if not recognized_text.strip():
         return {
-            "order_number": "ТЕКСТ НЕ НАЙДЕН",
-            "product_name": "ТЕКСТ НЕ НАЙДЕН",
-            "department": "ТЕКСТ НЕ НАЙДЕН",
+            "order_number": "ОШИБКА API",
+            "product_name": "ОШИБКА API",
+            "department": "ОШИБКА API",
             "confidence": 0.0,
+            "full_text": "",
         }
 
     # ── 1. Номер заказа ──────────────────────────
@@ -212,4 +214,5 @@ def scan_document(image_path: str) -> dict:
         "product_name": product_name,
         "department": department,
         "confidence": 0.99,
+        "full_text": recognized_text,
     }
