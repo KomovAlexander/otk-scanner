@@ -99,3 +99,61 @@ async def api_scan_gch(file: UploadFile = File(...)):
         "numbers": numbers,
         "count": len(numbers),
     })
+
+# ── Страница сканирования Г3 ──────────────────────
+@router.get("/check-g3")
+def check_g3_page(request: Request):
+    return templates.TemplateResponse("check_g3.html", {"request": request})
+
+
+# ── Эндпоинт приёма фото Г3 ───────────────────────
+@router.post("/api/scan-g3")
+async def api_scan_g3(file: UploadFile = File(...)):
+    upload_dir = "app/static/uploads"
+    os.makedirs(upload_dir, exist_ok=True)
+    
+    import uuid
+    safe_name = f"g3_{uuid.uuid4().hex[:8]}.jpg"
+    file_path = os.path.join(upload_dir, safe_name)
+
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+
+    # Автовыравнивание
+    from app.ocr_engine import perspective_correction
+    perspective_correction(file_path)
+
+    # Распознаём текст
+    from app.ocr_engine import scan_document
+    import re
+
+    result = scan_document(file_path)
+    full_text = result.get("full_text", "")
+
+    # Ищем номер Г3
+    g3_match = re.search(
+        r"([A-ZА-Я]{1,2}\d{1,2}[.\-]\d{3,4}[.\-]\d{3,4}[.\-]\d{3,4}\s*Г[3З])",
+        full_text, re.IGNORECASE,
+    )
+    if g3_match:
+        g3_number = g3_match.group(1).strip().replace('ГЗ', 'Г3')
+    g3_number = g3_match.group(1).strip() if g3_match else "НЕ НАЙДЕНО"
+
+    # Ищем изделие
+    product_match = re.search(
+        r"CTR[.\-\s]?KV[.\-\s]?[A-ZА-Я0-9.\-]{2,}",
+        full_text, re.IGNORECASE,
+    )
+    found_product = product_match.group(0).strip() if product_match else "НЕ НАЙДЕНО"
+
+    # Извлекаем параметры через GPT
+    from app.param_extractor import extract_params_via_gpt
+    params = extract_params_via_gpt(full_text, found_product)
+
+    return JSONResponse(content={
+        "status": "ok",
+        "g3_number": g3_number,
+        "found_product": found_product,
+        "params": params,
+        "count": len(params),
+    })
