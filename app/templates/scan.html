@@ -124,7 +124,18 @@
                     });
             });
         });
+        document.getElementById('confirmYes').addEventListener('click', () => {
+            const order = document.getElementById('orderNumber').value;
+            const product = document.getElementById('productName').value;
+            const department = document.getElementById('department').value;
 
+            if (order === 'НЕ НАЙДЕНО' || product === 'НЕ НАЙДЕНО') {
+                alert('⚠️ Заполните все поля!');
+                return;
+            }
+
+            window.location.href = `/check-gch?order=${encodeURIComponent(order)}&product=${encodeURIComponent(product)}&department=${encodeURIComponent(department)}`;
+        });
         // Нет, внести вручную
         document.getElementById('confirmNo').addEventListener('click', () => {
             const fields = ['orderNumber', 'department', 'productName'];

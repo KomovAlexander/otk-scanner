@@ -202,7 +202,12 @@
 
                 fetch('/api/scan-pg3', { method: 'POST', body: formData })
                     .then(res => res.json())
-                    .then(data => {
+                    .then(data => {                    
+                        if (data.status === 'error') {
+                            alert(data.message);
+                            resultCard.style.display = 'none';
+                            return;
+                        }
                         scanAnimation.style.display = 'none';
                         resultData.style.display = 'block';
                         
@@ -232,7 +237,8 @@
         }
 
         function goNext() {
-            alert('✅ Перечень сохранён!\nСледующий шаг — протокол испытаний (будет добавлен позже).');
+            const params = new URLSearchParams(window.location.search);
+            window.location.href = '/protocol?' + params.toString();
         }
     </script>
 </body>

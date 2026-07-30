@@ -204,6 +204,11 @@
                 fetch('/api/scan-g3', { method: 'POST', body: formData })
                     .then(res => res.json())
                     .then(data => {
+                        if (data.status === 'error') {
+                            alert(data.message);
+                            resultCard.style.display = 'none';
+                            return;
+                        }
                         scanAnimation.style.display = 'none';
                         resultData.style.display = 'block';
                         
@@ -234,7 +239,8 @@
         }
 
         function goNext() {
-            alert('✅ Параметры сохранены!\nСледующий шаг — проверка ПГ3 (будет добавлен позже).');
+            const params = new URLSearchParams(window.location.search);
+            window.location.href = '/check-pg3?' + params.toString();
         }
     </script>
 </body>

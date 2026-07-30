@@ -241,14 +241,17 @@
                 fetch('/api/scan-gch', { method: 'POST', body: formData })
                     .then(res => res.json())
                     .then(data => {
+                        if (data.status === 'error') {
+                            alert(data.message);
+                            resultCard.style.display = 'none';
+                            return;
+                        }
                         scanAnimation.style.display = 'none';
                         resultData.style.display = 'block';
                         
-                        // Заполняем номер ГЧ и изделие
                         document.getElementById('gchNumber').value = data.gch_number || 'НЕ НАЙДЕНО';
                         document.getElementById('gchProduct').value = data.found_product || 'НЕ НАЙДЕНО';
                         document.getElementById('gchRal').value = data.ral || 'НЕ НАЙДЕНО';                      
-                        // Размеры
                         currentNumbers = data.numbers || [];
                         renderNumbers();
                     })
@@ -291,11 +294,14 @@
 
         function goNext() {
             currentNumbers = currentNumbers.filter(n => n.trim());
-            if (currentNumbers.length === 0) {
-                alert('Добавьте хотя бы один размер!');
-                return;
-            }
-            alert('✅ Размеры сохранены: ' + currentNumbers.join(', ') + '\nСледующий шаг — проверка Г3 (будет добавлен позже).');
+            const params = new URLSearchParams(window.location.search);
+            const ral = document.getElementById('gchRal').value;
+            const sizes = currentNumbers.join(',');
+            
+            params.set('gch_sizes', sizes);
+            params.set('gch_ral', ral);
+            
+            window.location.href = '/check-g3?' + params.toString();
         }
         function validateRal(input) {
             // Удаляем всё кроме цифр

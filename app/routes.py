@@ -65,7 +65,12 @@ async def api_scan_gch(file: UploadFile = File(...)):
 
     result = scan_document(file_path)
     full_text = result.get("full_text", "")
-
+    # Проверяем что это действительно ГЧ
+    if "ГЧ" not in full_text and "Габаритный" not in full_text:
+        return JSONResponse(content={
+            "status": "error",
+            "message": "❌ Это не ГЧ! Сфотографируйте габаритный чертёж.",
+        })
     # Ищем номер ГЧ (например: В1-0169.000.000 ГЧ)
     gch_match = re.search(
         r"([A-ZА-Я]{1,2}\d{1,2}[.\-]\d{3,4}[.\-]\d{3,4}[.\-]\d{3,4}\s*ГЧ)",
@@ -131,7 +136,12 @@ async def api_scan_g3(file: UploadFile = File(...)):
 
     result = scan_document(file_path)
     full_text = result.get("full_text", "")
-
+    # Проверяем что это действительно Г3
+    if "Г3" not in full_text and "ГЗ" not in full_text and "Схема гидравлическая" not in full_text:
+        return JSONResponse(content={
+            "status": "error",
+            "message": "❌ Это не Г3! Сфотографируйте гидравлическую схему.",
+        })
     # Ищем номер Г3
     g3_match = re.search(
         r"([A-ZА-Я]{1,2}\d{1,2}[.\-]\d{3,4}[.\-]\d{3,4}[.\-]\d{3,4}\s*Г[3З])",
@@ -192,7 +202,12 @@ async def api_scan_pg3(file: UploadFile = File(...)):
 
     result = scan_document(file_path)
     full_text = result.get("full_text", "")
-
+    # Проверяем что это действительно ПГ3
+    if "ПГ3" not in full_text and "ПГЗ" not in full_text and "Перечень элементов" not in full_text:
+        return JSONResponse(content={
+            "status": "error",
+            "message": "❌ Это не ПГ3! Сфотографируйте перечень элементов.",
+        })
     # Ищем номер ПГ3
     pg3_match = re.search(
         r"([A-ZА-Я]{1,2}\d{1,2}[.\-]\d{3,4}[.\-]\d{3,4}[.\-]\d{3,4}\s*ПГ[3З])",
