@@ -237,8 +237,13 @@
 
                 const formData = new FormData();
                 formData.append('file', file);
-
-                fetch('/api/scan-gch', { method: 'POST', body: formData })
+                const params = new URLSearchParams(window.location.search);
+                const orderId = params.get('order_id');
+                const url = orderId ? `/api/scan-gch?order_id=${orderId}` : '/api/scan-gch';
+                if (orderId) {
+                    formData.append('order_id', orderId);
+                }
+                fetch(url, { method: 'POST', body: formData })
                     .then(res => res.json())
                     .then(data => {
                         if (data.status === 'error') {
@@ -292,15 +297,30 @@
             if (inputs.length > 0) inputs[inputs.length - 1].focus();
         }
 
-        function goNext() {
+        async function goNext() {
             currentNumbers = currentNumbers.filter(n => n.trim());
             const params = new URLSearchParams(window.location.search);
-            const ral = document.getElementById('gchRal').value;
-            const sizes = currentNumbers.join(',');
-            
-            params.set('gch_sizes', sizes);
-            params.set('gch_ral', ral);
-            
+            const orderId = params.get('order_id');
+
+            // Сохраняем отредактированные данные в БД
+            if (orderId) {
+                const gchNumber = document.getElementById('gchNumber').value;
+                const ral = document.getElementById('gchRal').value;
+                
+                await fetch('/api/save-gch', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        order_id: parseInt(orderId),
+                        gch_number: gchNumber,
+                        ral: ral,
+                        sizes: currentNumbers
+                    })
+                });
+            }
+
+            params.set('gch_sizes', currentNumbers.join(','));
+            params.set('gch_ral', document.getElementById('gchRal').value);
             window.location.href = '/check-g3?' + params.toString();
         }
         function validateRal(input) {

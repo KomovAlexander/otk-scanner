@@ -80,30 +80,26 @@
         const resultCard = document.getElementById('resultCard');
         const scanAnimation = document.getElementById('scanAnimation');
         const resultData = document.getElementById('resultData');
+        let currentOrderId = null;
 
-        // Кнопка "Сделать фото" открывает камеру
         captureBtn.addEventListener('click', () => cameraInput.click());
 
-        // Обработчик для обоих input'ов (камера и галерея)
         [cameraInput, galleryInput].forEach(input => {
             input.addEventListener('change', () => {
                 const file = input.files[0];
                 if (!file) return;
 
-                // Показываем превью
                 const reader = new FileReader();
                 reader.onload = (e) => {
                     document.getElementById('previewArea').innerHTML =
-                        `<img src="${e.target.result}" alt="Фото документа">`;
+                        `<img src="${e.target.result}" alt="Фото">`;
                 };
                 reader.readAsDataURL(file);
 
-                // Показываем анимацию сканирования
                 resultCard.style.display = 'block';
                 scanAnimation.style.display = 'block';
                 resultData.style.display = 'none';
 
-                // Отправляем на сервер
                 const formData = new FormData();
                 formData.append('file', file);
 
@@ -118,13 +114,15 @@
                         document.getElementById('productName').value = data.product_name;
                         document.getElementById('confidenceValue').textContent =
                             Math.round(data.confidence * 100) + '%';
+                        
+                        currentOrderId = data.order_id;
                     })
-                    .catch(err => {
-                        alert('Ошибка распознавания: ' + err);
-                    });
+                    .catch(err => alert('Ошибка: ' + err));
             });
         });
-        document.getElementById('confirmYes').addEventListener('click', () => {
+        
+        // Да, всё верно
+        document.getElementById('confirmYes').addEventListener('click', async () => {
             const order = document.getElementById('orderNumber').value;
             const product = document.getElementById('productName').value;
             const department = document.getElementById('department').value;
@@ -134,8 +132,27 @@
                 return;
             }
 
-            window.location.href = `/check-gch?order=${encodeURIComponent(order)}&product=${encodeURIComponent(product)}&department=${encodeURIComponent(department)}`;
+            // Сохраняем отредактированные данные заказа
+            if (currentOrderId) {
+                await fetch('/api/save-order', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        order_id: currentOrderId,
+                        order_number: order,
+                        product_name: product,
+                        department: department
+                    })
+                });
+            }
+
+            let url = `/check-gch?order=${encodeURIComponent(order)}&product=${encodeURIComponent(product)}&department=${encodeURIComponent(department)}`;
+            if (currentOrderId) {
+                url += `&order_id=${currentOrderId}`;
+            }
+            window.location.href = url;
         });
+
         // Нет, внести вручную
         document.getElementById('confirmNo').addEventListener('click', () => {
             const fields = ['orderNumber', 'department', 'productName'];

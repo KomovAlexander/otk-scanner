@@ -94,25 +94,57 @@
             margin-top: 16px;
         }
         .items-table th, .items-table td {
-            padding: 10px 8px;
+            padding: 8px 6px;
             text-align: left;
             font-size: 13px;
             border-bottom: 1px solid #2a2d35;
         }
         .items-table th { color: #ff6b35; }
-
-        .btn-next {
-            display: block;
+        .items-table input {
             width: 100%;
-            padding: 16px;
-            margin-top: 20px;
+            padding: 8px 10px;
+            background: #2a2d35;
+            border: 1px solid #3a3d45;
+            border-radius: 6px;
+            color: #fff;
+            font-size: 13px;
+        }
+        .items-table input.pos-input { width: 50px; text-align: center; }
+        .items-table input.qty-input { width: 50px; text-align: center; }
+
+        .btn-row {
+            display: flex;
+            gap: 10px;
+            margin-top: 16px;
+        }
+        .btn-add {
+            flex: 1;
+            padding: 12px;
             background: #4caf50;
             color: #fff;
             border: none;
-            border-radius: 10px;
-            font-size: 17px;
-            font-weight: 600;
+            border-radius: 8px;
+            font-size: 14px;
             cursor: pointer;
+        }
+        .btn-next {
+            flex: 1;
+            padding: 12px;
+            background: #ff6b35;
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            cursor: pointer;
+        }
+        .btn-delete {
+            padding: 6px 10px;
+            background: #f44336;
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 12px;
         }
     </style>
 </head>
@@ -145,27 +177,31 @@
                 <div class="field-row">
                     <span class="field-icon">📄</span>
                     <span class="field-label">Номер ПГ3</span>
-                    <input type="text" id="pg3Number" class="field-value" onfocus="this.blur()">
+                    <input type="text" id="pg3Number" class="field-value" onfocus="this.removeAttribute('onfocus')">
                 </div>
                 <div class="field-row">
                     <span class="field-icon">⚙️</span>
                     <span class="field-label">Изделие</span>
-                    <input type="text" id="pg3Product" class="field-value" onfocus="this.blur()">
+                    <input type="text" id="pg3Product" class="field-value" onfocus="this.removeAttribute('onfocus')">
                 </div>
 
-                <h3 style="margin-top: 20px;">📦 Позиции:</h3>
+                <h3 style="margin-top: 20px;">📦 Позиции (редактируемые):</h3>
                 <table class="items-table">
                     <thead>
                         <tr>
                             <th>Поз.</th>
                             <th>Наименование</th>
                             <th>Кол.</th>
+                            <th></th>
                         </tr>
                     </thead>
                     <tbody id="itemsBody"></tbody>
                 </table>
 
-                <button class="btn-next" onclick="goNext()">Далее →</button>
+                <div class="btn-row">
+                    <button class="btn-add" onclick="addItem()">+ Добавить позицию</button>
+                    <button class="btn-next" onclick="goNext()">Далее →</button>
+                </div>
             </div>
         </div>
     </div>
@@ -200,9 +236,13 @@
                 const formData = new FormData();
                 formData.append('file', file);
 
-                fetch('/api/scan-pg3', { method: 'POST', body: formData })
+                const params = new URLSearchParams(window.location.search);
+                const orderId = params.get('order_id');
+                const url = orderId ? `/api/scan-pg3?order_id=${orderId}` : '/api/scan-pg3';
+
+                fetch(url, { method: 'POST', body: formData })
                     .then(res => res.json())
-                    .then(data => {                    
+                    .then(data => {
                         if (data.status === 'error') {
                             alert(data.message);
                             resultCard.style.display = 'none';
@@ -224,21 +264,52 @@
         function renderItems() {
             const tbody = document.getElementById('itemsBody');
             if (!currentItems || currentItems.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:#888;">Позиции не найдены</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#888;">Позиции не найдены</td></tr>';
                 return;
             }
-            tbody.innerHTML = currentItems.map(item => `
+            tbody.innerHTML = currentItems.map((item, i) => `
                 <tr>
-                    <td>${item.position || ''}</td>
-                    <td>${item.name || ''}</td>
-                    <td>${item.quantity || '1'}</td>
+                    <td><input type="text" class="pos-input" value="${item.position || ''}" oninput="updateItem(${i}, 'position', this.value)"></td>
+                    <td><input type="text" value="${item.name || ''}" oninput="updateItem(${i}, 'name', this.value)"></td>
+                    <td><input type="text" class="qty-input" value="${item.quantity || '1'}" oninput="updateItem(${i}, 'quantity', this.value)"></td>
+                    <td><button class="btn-delete" onclick="deleteItem(${i})">✕</button></td>
                 </tr>
             `).join('');
         }
 
-        function goNext() {
+        function updateItem(index, field, value) {
+            if (!currentItems[index]) return;
+            currentItems[index][field] = value;
+        }
+
+        function deleteItem(index) {
+            currentItems.splice(index, 1);
+            renderItems();
+        }
+
+        function addItem() {
+            currentItems.push({ position: '', name: '', quantity: '1' });
+            renderItems();
+        }
+
+        async function goNext() {
             const params = new URLSearchParams(window.location.search);
-            window.location.href = '/protocol?' + params.toString();
+            const orderId = params.get('order_id');
+
+            if (orderId) {
+                const pg3Number = document.getElementById('pg3Number').value;
+                await fetch('/api/save-pg3', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        order_id: parseInt(orderId),
+                        pg3_number: pg3Number,
+                        items: currentItems
+                    })
+                });
+            }
+
+            window.location.href = '/checklist?' + params.toString();
         }
     </script>
 </body>
