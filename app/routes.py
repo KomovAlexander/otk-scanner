@@ -9,6 +9,43 @@ from app.database import get_db
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
 
+# ── Страница визуального контроля ──────────────────
+@router.get("/visual-check")
+def visual_check_page(request: Request):
+    order_id = request.query_params.get("order_id", None)
+    
+    gch_data = None
+    order_data = None
+    
+    if order_id:
+        from app.database import get_db
+        conn = get_db()
+        cursor = conn.cursor()
+        
+        # Заказ
+        cursor.execute("SELECT * FROM orders WHERE id = ?", (int(order_id),))
+        row = cursor.fetchone()
+        order_data = dict(row) if row else None
+        
+        # ГЧ
+        cursor.execute("SELECT * FROM gch_data WHERE order_id = ?", (int(order_id),))
+        row = cursor.fetchone()
+        gch_data = dict(row) if row else None
+        
+        # RAL цвета
+        conn.close()
+
+    import json
+ 
+    return templates.TemplateResponse("visual_check.html", {
+        "request": request,
+        "order_id": order_id,
+        "order": order_data,
+        "gch": gch_data,
+        "gch_sizes": json.loads(gch_data.get("sizes", "[]")) if gch_data else [],
+        "gch_ral": gch_data.get("ral", "") if gch_data else "",
+    })
+
 
 # ── Главная страница = сразу сканирование ──────────
 @router.get("/")
@@ -356,3 +393,4 @@ async def api_save_pg3(request: Request):
         return JSONResponse(content={"status": "ok"})
 
     return JSONResponse(content={"status": "error", "message": "Нет order_id"}, status_code=400)
+
