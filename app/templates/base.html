@@ -148,6 +148,36 @@
         .match-ok { border-color: #4caf50 !important; background: #1e3a1e !important; }
         .match-fail { border-color: #f44336 !important; background: #3a2020 !important; }
 
+        /* Прогресс-бар */
+        .progress-bar {
+            background: #14161a;
+            padding: 12px 20px;
+            display: flex;
+            justify-content: center;
+            gap: 8px;
+            flex-wrap: wrap;
+            border-bottom: 1px solid #2a2d35;
+        }
+        .progress-step {
+            padding: 8px 14px;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            text-decoration: none;
+        }
+        .progress-step.active {
+            background: #ff6b35;
+            color: #fff;
+        }
+        .progress-step.done {
+            background: #1e3a1e;
+            color: #4caf50;
+        }
+        .progress-step.future {
+            background: #2a2d35;
+            color: #666;
+        }
+
         @media (max-width: 480px) {
             .page-header h1 { font-size: 20px; }
             .capture-zone { padding: 20px 14px; }
@@ -155,11 +185,31 @@
             .btn-capture, .btn-upload { font-size: 14px; padding: 14px; }
             .field-row { flex-direction: column; align-items: flex-start; gap: 6px; }
             .field-label { width: 100%; }
+            .progress-step { padding: 6px 10px; font-size: 11px; }
         }
     </style>
     {% block extra_css %}{% endblock %}
 </head>
 <body>
+    <!-- Прогресс-бар -->
+    {% set step_order = ["order", "gch", "g3", "pg3", "visual"] %}
+    {% set step_names = {"order": "📷 Заказ", "gch": "📐 ГЧ", "g3": "🔧 Г3", "pg3": "📋 ПГ3", "visual": "🔍 Контроль"} %}
+    {% set step_urls = {"order": "/", "gch": "/check-gch", "g3": "/check-g3", "pg3": "/check-pg3", "visual": "/visual-check"} %}
+    
+    {% if current_step %}
+    <div class="progress-bar">
+        {% for key in step_order %}
+            {% if key == current_step %}
+                <span class="progress-step active">{{ step_names[key] }}</span>
+            {% elif key in completed_steps %}
+                <a href="{{ step_urls[key] }}{% if order_id %}?order_id={{ order_id }}{% endif %}" class="progress-step done">✅ {{ step_names[key].split(' ', 1)[1] }}</a>
+            {% else %}
+                <span class="progress-step future">⏳ {{ step_names[key].split(' ', 1)[1] }}</span>
+            {% endif %}
+        {% endfor %}
+    </div>
+    {% endif %}
+
     {% block content %}{% endblock %}
     {% block extra_js %}{% endblock %}
 </body>

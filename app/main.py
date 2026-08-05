@@ -7,7 +7,7 @@ from app.routes import router
 app = FastAPI(title="ОТК Сканер", version="1.0.0")
 
 # Подключаем папку со стилями
-app.mount("/static", StaticFiles(directory="app/static"), name="static")
+app.mount("/uploads", StaticFiles(directory="app/static/uploads"), name="uploads")
 
 # Подключаем маршруты
 app.include_router(router)

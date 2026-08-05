@@ -9,48 +9,64 @@ from app.database import get_db
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
 
-# ── Страница визуального контроля ──────────────────
-@router.get("/visual-check")
-def visual_check_page(request: Request):
-    order_id = request.query_params.get("order_id", None)
-    
-    gch_data = None
-    order_data = None
-    
-    if order_id:
-        from app.database import get_db
-        conn = get_db()
-        cursor = conn.cursor()
-        
-        # Заказ
-        cursor.execute("SELECT * FROM orders WHERE id = ?", (int(order_id),))
-        row = cursor.fetchone()
-        order_data = dict(row) if row else None
-        
-        # ГЧ
-        cursor.execute("SELECT * FROM gch_data WHERE order_id = ?", (int(order_id),))
-        row = cursor.fetchone()
-        gch_data = dict(row) if row else None
-        
-        # RAL цвета
-        conn.close()
+# Папка для хранения файлов
+UPLOAD_ROOT = "app/static/uploads"
 
-    import json
- 
-    return templates.TemplateResponse("visual_check.html", {
-        "request": request,
-        "order_id": order_id,
-        "order": order_data,
-        "gch": gch_data,
-        "gch_sizes": json.loads(gch_data.get("sizes", "[]")) if gch_data else [],
-        "gch_ral": gch_data.get("ral", "") if gch_data else "",
-    })
+
+def save_uploaded_file(order_id: int, doc_type: str, file: UploadFile) -> str:
+    """Сохраняет файл и возвращает URL-путь."""
+    order_dir = os.path.join(UPLOAD_ROOT, f"order_{order_id}")
+    os.makedirs(order_dir, exist_ok=True)
+    
+    ext = os.path.splitext(file.filename)[1] or ".jpg"
+    saved_name = f"{doc_type}{ext}"
+    file_path = os.path.join(order_dir, saved_name)
+    
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+    
+    return f"/static/uploads/order_{order_id}/{saved_name}"
+
+
+def get_saved_file_path(order_id: int, doc_type: str) -> str | None:
+    """Возвращает URL-путь к сохранённому файлу."""
+    order_dir = os.path.join(UPLOAD_ROOT, f"order_{order_id}")
+    if not os.path.exists(order_dir):
+        return None
+    
+    for ext in [".jpg", ".jpeg", ".png"]:
+        file_name = f"{doc_type}{ext}"
+        file_path = os.path.join(order_dir, file_name)
+        if os.path.exists(file_path):
+            # Возвращаем URL-путь (без app/)
+            return f"/uploads/order_{order_id}/{file_name}"
+    return None
 
 
 # ── Главная страница = сразу сканирование ──────────
 @router.get("/")
 def scan_page(request: Request):
-    return templates.TemplateResponse("scan.html", {"request": request})
+    order_id = request.query_params.get("order_id", "")
+    
+    order_data = None
+    saved_photo = None
+    if order_id:
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM orders WHERE id = ?", (int(order_id),))
+        row = cursor.fetchone()
+        order_data = dict(row) if row else None
+        conn.close()
+        saved_photo = get_saved_file_path(int(order_id), "order")
+
+    return templates.TemplateResponse("scan.html", {
+        "request": request,
+        "current_step": "order",
+        "completed_steps": [],
+        "order_id": order_id,
+        "order_data": order_data,
+        "saved_photo": saved_photo,
+    })
 
 
 # ── Эндпоинт приёма фото заказа ────────────────────
@@ -72,12 +88,19 @@ async def api_scan(file: UploadFile = File(...)):
         result.get("department", ""),
     )
 
+    # Сохраняем файл в папку заказа
+    # Переоткрываем файл для сохранения
+    with open(file_path, "rb") as f:
+        file.file = f
+        saved_path = save_uploaded_file(order_id, "order", file)
+
     return JSONResponse(content={
         "status": "ok",
         "order_id": order_id,
         "order_number": result.get("order_number", "НЕ РАСПОЗНАНО"),
         "product_name": result.get("product_name", "НЕ РАСПОЗНАНО"),
         "department": result.get("department", "НЕ РАСПОЗНАНО"),
+        "saved_photo": saved_path,
         "confidence": result.get("confidence", 0.0)
     })
 
@@ -107,7 +130,6 @@ async def api_save_order(request: Request):
 
 # ── Вспомогательная функция проверки изделия ────────
 def check_product_match(order_id: str, found_product: str) -> str | None:
-    """Проверяет совпадение изделия из КД с изделием из заказа. Возвращает сообщение об ошибке или None."""
     if not order_id or not found_product:
         return None
 
@@ -134,7 +156,38 @@ def check_product_match(order_id: str, found_product: str) -> str | None:
 # ── Страница сканирования ГЧ ──────────────────────
 @router.get("/check-gch")
 def check_gch_page(request: Request):
-    return templates.TemplateResponse("check_gch.html", {"request": request})
+    order_id = request.query_params.get("order_id", "")
+    
+    gch_data = None
+    order_data = None
+    saved_photo = None
+    if order_id:
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM orders WHERE id = ?", (int(order_id),))
+        row = cursor.fetchone()
+        order_data = dict(row) if row else None
+        cursor.execute("SELECT * FROM gch_data WHERE order_id = ?", (int(order_id),))
+        row = cursor.fetchone()
+        gch_data = dict(row) if row else None
+        conn.close()
+        saved_photo = get_saved_file_path(int(order_id), "gch")
+
+    import json
+    
+    return templates.TemplateResponse("check_gch.html", {
+        "request": request,
+        "current_step": "gch",
+        "completed_steps": ["order"],
+        "order_id": order_id,
+        "order_data": order_data,
+        "gch_data": gch_data,
+        "saved_photo": saved_photo,
+        "gch_number": gch_data.get("gch_number", "") if gch_data else "",
+        "gch_product": order_data.get("product_name", "") if order_data else "",
+        "gch_ral": gch_data.get("ral", "") if gch_data else "",
+        "gch_sizes": json.loads(gch_data.get("sizes", "[]")) if gch_data else [],
+    })
 
 
 # ── Эндпоинт приёма фото ГЧ ───────────────────────
@@ -159,10 +212,7 @@ async def api_scan_gch(request: Request, file: UploadFile = File(...)):
     full_text = result.get("full_text", "")
 
     if "ГЧ" not in full_text and "Габаритный" not in full_text:
-        return JSONResponse(content={
-            "status": "error",
-            "message": "❌ Это не ГЧ! Сфотографируйте габаритный чертёж.",
-        })
+        return JSONResponse(content={"status": "error", "message": "❌ Это не ГЧ! Сфотографируйте габаритный чертёж."})
 
     gch_match = re.search(
         r"([A-ZА-Я]{1,2}\d{1,2}[.\-]\d{3,4}[.\-]\d{3,4}[.\-]\d{3,4}\s*ГЧ)",
@@ -170,20 +220,13 @@ async def api_scan_gch(request: Request, file: UploadFile = File(...)):
     )
     gch_number = gch_match.group(1).strip() if gch_match else "НЕ НАЙДЕНО"
 
-    product_match = re.search(
-        r"CTR[.\-\s]?KV[.\-\s]?[A-ZА-Я0-9.\-]{2,}",
-        full_text, re.IGNORECASE,
-    )
+    product_match = re.search(r"CTR[.\-\s]?KV[.\-\s]?[A-ZА-Я0-9.\-]{2,}", full_text, re.IGNORECASE)
     found_product = product_match.group(0).strip() if product_match else "НЕ НАЙДЕНО"
 
-    # Проверка изделия
     order_id_str = request.query_params.get("order_id", None)
     product_error = check_product_match(order_id_str, found_product)
     if product_error:
-        return JSONResponse(content={
-            "status": "error",
-            "message": product_error,
-        })
+        return JSONResponse(content={"status": "error", "message": product_error})
 
     ral_match = re.search(r"RAL\s*(\d{4})", full_text, re.IGNORECASE)
     ral = ral_match.group(1).strip() if ral_match else ""
@@ -191,18 +234,21 @@ async def api_scan_gch(request: Request, file: UploadFile = File(...)):
     from app.green_extractor import extract_all_colored_numbers
     numbers = extract_all_colored_numbers(file_path)
 
-    # Автосохранение
     if order_id_str:
         from app.database import save_gch
         save_gch(int(order_id_str), gch_number, ral, numbers)
+        # Сохраняем файл (переоткрываем для чтения)
+        with open(file_path, "rb") as f:
+            # Копируем в папку заказа
+            order_dir = os.path.join("app/static/uploads", f"order_{int(order_id_str)}")
+            os.makedirs(order_dir, exist_ok=True)
+            dest_path = os.path.join(order_dir, "gch.jpeg")
+            with open(dest_path, "wb") as dest:
+                shutil.copyfileobj(f, dest)
 
     return JSONResponse(content={
-        "status": "ok",
-        "gch_number": gch_number,
-        "found_product": found_product,
-        "ral": ral,
-        "numbers": numbers,
-        "count": len(numbers),
+        "status": "ok", "gch_number": gch_number, "found_product": found_product,
+        "ral": ral, "numbers": numbers, "count": len(numbers),
     })
 
 
@@ -211,22 +257,47 @@ async def api_scan_gch(request: Request, file: UploadFile = File(...)):
 async def api_save_gch(request: Request):
     data = await request.json()
     order_id = data.get("order_id")
-    gch_number = data.get("gch_number", "")
-    ral = data.get("ral", "")
-    sizes = data.get("sizes", [])
-
     if order_id:
         from app.database import save_gch
-        save_gch(int(order_id), gch_number, ral, sizes)
+        save_gch(int(order_id), data.get("gch_number", ""), data.get("ral", ""), data.get("sizes", []))
         return JSONResponse(content={"status": "ok"})
-
     return JSONResponse(content={"status": "error", "message": "Нет order_id"}, status_code=400)
 
 
 # ── Страница сканирования Г3 ──────────────────────
 @router.get("/check-g3")
 def check_g3_page(request: Request):
-    return templates.TemplateResponse("check_g3.html", {"request": request})
+    order_id = request.query_params.get("order_id", "")
+    
+    g3_data = None
+    order_data = None
+    saved_photo = None
+    if order_id:
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM orders WHERE id = ?", (int(order_id),))
+        row = cursor.fetchone()
+        order_data = dict(row) if row else None
+        cursor.execute("SELECT * FROM g3_data WHERE order_id = ?", (int(order_id),))
+        row = cursor.fetchone()
+        g3_data = dict(row) if row else None
+        conn.close()
+        saved_photo = get_saved_file_path(int(order_id), "g3")
+
+    import json
+    
+    return templates.TemplateResponse("check_g3.html", {
+        "request": request,
+        "current_step": "g3",
+        "completed_steps": ["order", "gch"],
+        "order_id": order_id,
+        "order_data": order_data,
+        "g3_data": g3_data,
+        "saved_photo": saved_photo,
+        "g3_number": g3_data.get("g3_number", "") if g3_data else "",
+        "g3_product": order_data.get("product_name", "") if order_data else "",
+        "g3_params": json.loads(g3_data.get("params", "[]")) if g3_data else [],
+    })
 
 
 # ── Эндпоинт приёма фото Г3 ───────────────────────
@@ -251,31 +322,18 @@ async def api_scan_g3(request: Request, file: UploadFile = File(...)):
     full_text = result.get("full_text", "")
 
     if "Г3" not in full_text and "ГЗ" not in full_text and "Схема гидравлическая" not in full_text:
-        return JSONResponse(content={
-            "status": "error",
-            "message": "❌ Это не Г3! Сфотографируйте гидравлическую схему.",
-        })
+        return JSONResponse(content={"status": "error", "message": "❌ Это не Г3! Сфотографируйте гидравлическую схему."})
 
-    g3_match = re.search(
-        r"([A-ZА-Я]{1,2}\d{1,2}[.\-]\d{3,4}[.\-]\d{3,4}[.\-]\d{3,4}\s*Г[3З])",
-        full_text, re.IGNORECASE,
-    )
+    g3_match = re.search(r"([A-ZА-Я]{1,2}\d{1,2}[.\-]\d{3,4}[.\-]\d{3,4}[.\-]\d{3,4}\s*Г[3З])", full_text, re.IGNORECASE)
     g3_number = g3_match.group(1).strip().replace('ГЗ', 'Г3') if g3_match else "НЕ НАЙДЕНО"
 
-    product_match = re.search(
-        r"CTR[.\-\s]?KV[.\-\s]?[A-ZА-Я0-9.\-]{2,}",
-        full_text, re.IGNORECASE,
-    )
+    product_match = re.search(r"CTR[.\-\s]?KV[.\-\s]?[A-ZА-Я0-9.\-]{2,}", full_text, re.IGNORECASE)
     found_product = product_match.group(0).strip() if product_match else "НЕ НАЙДЕНО"
 
-    # Проверка изделия
     order_id_str = request.query_params.get("order_id", None)
     product_error = check_product_match(order_id_str, found_product)
     if product_error:
-        return JSONResponse(content={
-            "status": "error",
-            "message": product_error,
-        })
+        return JSONResponse(content={"status": "error", "message": product_error})
 
     from app.param_extractor import extract_params_via_gpt
     params = extract_params_via_gpt(full_text, found_product)
@@ -283,13 +341,11 @@ async def api_scan_g3(request: Request, file: UploadFile = File(...)):
     if order_id_str:
         from app.database import save_g3
         save_g3(int(order_id_str), g3_number, params)
+        save_uploaded_file(int(order_id_str), "g3", file)
 
     return JSONResponse(content={
-        "status": "ok",
-        "g3_number": g3_number,
-        "found_product": found_product,
-        "params": params,
-        "count": len(params),
+        "status": "ok", "g3_number": g3_number, "found_product": found_product,
+        "params": params, "count": len(params),
     })
 
 
@@ -298,21 +354,47 @@ async def api_scan_g3(request: Request, file: UploadFile = File(...)):
 async def api_save_g3(request: Request):
     data = await request.json()
     order_id = data.get("order_id")
-    g3_number = data.get("g3_number", "")
-    params = data.get("params", [])
-
     if order_id:
         from app.database import save_g3
-        save_g3(int(order_id), g3_number, params)
+        save_g3(int(order_id), data.get("g3_number", ""), data.get("params", []))
         return JSONResponse(content={"status": "ok"})
-
     return JSONResponse(content={"status": "error", "message": "Нет order_id"}, status_code=400)
 
 
 # ── Страница сканирования ПГ3 ─────────────────────
 @router.get("/check-pg3")
 def check_pg3_page(request: Request):
-    return templates.TemplateResponse("check_pg3.html", {"request": request})
+    order_id = request.query_params.get("order_id", "")
+    
+    pg3_data = None
+    order_data = None
+    saved_photo = None
+    if order_id:
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM orders WHERE id = ?", (int(order_id),))
+        row = cursor.fetchone()
+        order_data = dict(row) if row else None
+        cursor.execute("SELECT * FROM pg3_data WHERE order_id = ?", (int(order_id),))
+        row = cursor.fetchone()
+        pg3_data = dict(row) if row else None
+        conn.close()
+        saved_photo = get_saved_file_path(int(order_id), "pg3")
+
+    import json
+    
+    return templates.TemplateResponse("check_pg3.html", {
+        "request": request,
+        "current_step": "pg3",
+        "completed_steps": ["order", "gch", "g3"],
+        "order_id": order_id,
+        "order_data": order_data,
+        "pg3_data": pg3_data,
+        "saved_photo": saved_photo,
+        "pg3_number": pg3_data.get("pg3_number", "") if pg3_data else "",
+        "pg3_product": order_data.get("product_name", "") if order_data else "",
+        "pg3_items": json.loads(pg3_data.get("items", "[]")) if pg3_data else [],
+    })
 
 
 # ── Эндпоинт приёма фото ПГ3 ──────────────────────
@@ -337,31 +419,18 @@ async def api_scan_pg3(request: Request, file: UploadFile = File(...)):
     full_text = result.get("full_text", "")
 
     if "ПГ3" not in full_text and "ПГЗ" not in full_text and "Перечень элементов" not in full_text:
-        return JSONResponse(content={
-            "status": "error",
-            "message": "❌ Это не ПГ3! Сфотографируйте перечень элементов.",
-        })
+        return JSONResponse(content={"status": "error", "message": "❌ Это не ПГ3! Сфотографируйте перечень элементов."})
 
-    pg3_match = re.search(
-        r"([A-ZА-Я]{1,2}\d{1,2}[.\-]\d{3,4}[.\-]\d{3,4}[.\-]\d{3,4}\s*ПГ[3З])",
-        full_text, re.IGNORECASE,
-    )
+    pg3_match = re.search(r"([A-ZА-Я]{1,2}\d{1,2}[.\-]\d{3,4}[.\-]\d{3,4}[.\-]\d{3,4}\s*ПГ[3З])", full_text, re.IGNORECASE)
     pg3_number = pg3_match.group(1).strip().replace('ПГЗ', 'ПГ3') if pg3_match else "НЕ НАЙДЕНО"
 
-    product_match = re.search(
-        r"CTR[.\-\s]?KV[.\-\s]?[A-ZА-Я0-9.\-]{2,}",
-        full_text, re.IGNORECASE,
-    )
+    product_match = re.search(r"CTR[.\-\s]?KV[.\-\s]?[A-ZА-Я0-9.\-]{2,}", full_text, re.IGNORECASE)
     found_product = product_match.group(0).strip() if product_match else "НЕ НАЙДЕНО"
 
-    # Проверка изделия
     order_id_str = request.query_params.get("order_id", None)
     product_error = check_product_match(order_id_str, found_product)
     if product_error:
-        return JSONResponse(content={
-            "status": "error",
-            "message": product_error,
-        })
+        return JSONResponse(content={"status": "error", "message": product_error})
 
     from app.param_extractor import extract_pg3_via_gpt
     items = extract_pg3_via_gpt(full_text, found_product)
@@ -369,13 +438,11 @@ async def api_scan_pg3(request: Request, file: UploadFile = File(...)):
     if order_id_str:
         from app.database import save_pg3
         save_pg3(int(order_id_str), pg3_number, items)
+        save_uploaded_file(int(order_id_str), "pg3", file)
 
     return JSONResponse(content={
-        "status": "ok",
-        "pg3_number": pg3_number,
-        "found_product": found_product,
-        "items": items,
-        "count": len(items),
+        "status": "ok", "pg3_number": pg3_number, "found_product": found_product,
+        "items": items, "count": len(items),
     })
 
 
@@ -384,13 +451,44 @@ async def api_scan_pg3(request: Request, file: UploadFile = File(...)):
 async def api_save_pg3(request: Request):
     data = await request.json()
     order_id = data.get("order_id")
-    pg3_number = data.get("pg3_number", "")
-    items = data.get("items", [])
-
     if order_id:
         from app.database import save_pg3
-        save_pg3(int(order_id), pg3_number, items)
+        save_pg3(int(order_id), data.get("pg3_number", ""), data.get("items", []))
         return JSONResponse(content={"status": "ok"})
-
     return JSONResponse(content={"status": "error", "message": "Нет order_id"}, status_code=400)
 
+
+# ── Страница визуального контроля ──────────────────
+@router.get("/visual-check")
+def visual_check_page(request: Request):
+    order_id = request.query_params.get("order_id", None)
+    
+    gch_data = None
+    order_data = None
+    
+    if order_id:
+        conn = get_db()
+        cursor = conn.cursor()
+        
+        cursor.execute("SELECT * FROM orders WHERE id = ?", (int(order_id),))
+        row = cursor.fetchone()
+        order_data = dict(row) if row else None
+        
+        cursor.execute("SELECT * FROM gch_data WHERE order_id = ?", (int(order_id),))
+        row = cursor.fetchone()
+        gch_data = dict(row) if row else None
+        
+        conn.close()
+
+    import json
+    
+    return templates.TemplateResponse("visual_check.html", {
+        "request": request,
+        "current_step": "visual",
+        "completed_steps": ["order", "gch", "g3", "pg3"],
+        "order_id": order_id,
+        "order": order_data,
+        "gch": gch_data,
+        "gch_sizes": json.loads(gch_data.get("sizes", "[]")) if gch_data else [],
+        "gch_ral": gch_data.get("ral", "") if gch_data else "",
+    })

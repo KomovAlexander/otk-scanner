@@ -43,6 +43,32 @@
         cursor: pointer;
         font-size: 14px;
     }
+    .photo-preview {
+        text-align: center;
+        margin-bottom: 16px;
+    }
+    .photo-preview img {
+        max-width: 100%;
+        max-height: 300px;
+        border-radius: 8px;
+    }
+    @media (max-width: 480px) {
+        .size-row {
+            flex-wrap: wrap;
+        }
+        .size-row .etalon {
+            min-width: 100%;
+            margin-bottom: 4px;
+        }
+        .size-row input {
+            flex: 1;
+            min-width: 0;
+        }
+        .btn-remove {
+            padding: 10px 14px;
+            font-size: 16px;
+        }
+    }    
 </style>
 {% endblock %}
 
@@ -53,6 +79,44 @@
         <p>Сфотографируйте ГЧ. Система найдёт размеры, выделенные цветным маркером.</p>
     </div>
 
+    {% if saved_photo and gch_data %}
+    <!-- РЕЖИМ 2: заказ уже был — показываем фото и данные -->
+    <div class="capture-zone">
+        <div class="photo-preview">
+            <img src="{{ saved_photo }}" alt="Фото ГЧ">
+        </div>
+        <p>
+            <button class="btn-capture" onclick="document.getElementById('cameraInput').click()">📷 Переснять</button>
+            <label for="galleryInput" class="btn-upload">📁 Другой файл</label>
+        </p>
+    </div>
+    <input type="file" id="cameraInput" accept="image/*" capture="environment" hidden>
+    <input type="file" id="galleryInput" accept="image/*" hidden>
+
+    <div class="result-card" id="dataCard">
+        <h2>Проверьте данные:</h2>
+        <div class="field-row">
+            <span class="field-icon">📄</span>
+            <span class="field-label">Номер ГЧ</span>
+            <input type="text" id="gchNumber" class="field-value" value="{{ gch_number }}">
+        </div>
+        <div class="field-row">
+            <span class="field-icon">⚙️</span>
+            <span class="field-label">Изделие</span>
+            <input type="text" id="gchProduct" class="field-value" value="{{ gch_product }}">
+        </div>
+        <div class="field-row">
+            <span class="field-icon">🎨</span>
+            <span class="field-label">RAL</span>
+            <input type="text" id="gchRal" class="field-value" value="{{ gch_ral }}">
+        </div>
+        <h3 style="margin-top: 20px;">📏 Габаритные размеры:</h3>
+        <div id="numbersList"></div>
+        <button class="btn-add" onclick="addManual()">+ Добавить размер вручную</button>
+    </div>
+
+    {% else %}
+    <!-- РЕЖИМ 1: первый раз — только камера -->
     <div class="capture-zone">
         <div class="preview-area" id="previewArea">
             <span class="camera-icon">📷</span>
@@ -64,49 +128,71 @@
         <label for="galleryInput" class="btn-upload">📁 Загрузить из галереи</label>
     </div>
 
-    <div class="result-card" id="resultCard" style="display: none;">
-        <div class="scanning-animation" id="scanAnimation">
-            <div class="scan-line"></div>
-            <p>Идет распознавание…</p>
-        </div>
-        <div class="result-data" id="resultData" style="display: none;">
-            <h2>Проверьте данные:</h2>
-            <div class="field-row">
-                <span class="field-icon">📄</span>
-                <span class="field-label">Номер ГЧ</span>
-                <input type="text" id="gchNumber" class="field-value" onfocus="this.blur()">
-            </div>
-            <div class="field-row">
-                <span class="field-icon">⚙️</span>
-                <span class="field-label">Изделие</span>
-                <input type="text" id="gchProduct" class="field-value" onfocus="this.blur()">
-            </div>
-            <div class="field-row">
-                <span class="field-icon">🎨</span>
-                <span class="field-label">RAL</span>
-                <input type="text" id="gchRal" class="field-value" onfocus="this.blur()">
-            </div>
-
-            <h3 style="margin-top: 20px;">📏 Габаритные размеры:</h3>
-            <div id="numbersList"></div>
-            <button class="btn-add" onclick="addManual()">+ Добавить размер вручную</button>
-            <button class="btn-next" onclick="goNext()">Далее →</button>
-        </div>
+    <!-- Скрытая анимация и карточка результата -->
+    <div class="scanning-animation" id="scanAnimation" style="display: none; text-align: center; padding: 20px;">
+        <div class="scan-line"></div>
+        <p>Идет распознавание…</p>
     </div>
+    <div class="result-card" id="dataCard" style="display: none;">
+        <h2>Проверьте данные:</h2>
+        <div class="field-row">
+            <span class="field-icon">📄</span>
+            <span class="field-label">Номер ГЧ</span>
+            <input type="text" id="gchNumber" class="field-value">
+        </div>
+        <div class="field-row">
+            <span class="field-icon">⚙️</span>
+            <span class="field-label">Изделие</span>
+            <input type="text" id="gchProduct" class="field-value">
+        </div>
+        <div class="field-row">
+            <span class="field-icon">🎨</span>
+            <span class="field-label">RAL</span>
+            <input type="text" id="gchRal" class="field-value">
+        </div>
+        <h3 style="margin-top: 20px;">📏 Габаритные размеры:</h3>
+        <div id="numbersList"></div>
+        <button class="btn-add" onclick="addManual()">+ Добавить размер вручную</button>
+    </div>
+    {% endif %}
+
+    <div class="scanning-animation" id="scanAnimation" style="display: none; text-align: center; padding: 20px;">
+        <div class="scan-line"></div>
+        <p>Идет распознавание…</p>
+    </div>
+
+        {% if gch_data %}
+        <button class="btn-next" id="btnNext" onclick="goNext()">Далее →</button>
+        {% else %}
+        <button class="btn-next" id="btnNext" onclick="goNext()" style="display: none;">Далее →</button>
+        {% endif %}
 </div>
 {% endblock %}
 
 {% block extra_js %}
 <script>
+    let currentNumbers = {{ gch_sizes | tojson }};
+    let hasData = {{ 'true' if gch_data else 'false' }};
+    
+    // Показываем размеры при загрузке
+    renderNumbers();
+
     const cameraInput = document.getElementById('cameraInput');
     const galleryInput = document.getElementById('galleryInput');
-    const captureBtn = document.getElementById('captureBtn');
-    const resultCard = document.getElementById('resultCard');
+    const dataCard = document.getElementById('dataCard');
     const scanAnimation = document.getElementById('scanAnimation');
-    const resultData = document.getElementById('resultData');
-    let currentNumbers = [];
-
-    captureBtn.addEventListener('click', () => cameraInput.click());
+    const btnNext = document.getElementById('btnNext');
+    // Если данные уже есть — разблокируем кнопку
+    if (hasData) {
+        btnNext.disabled = false;
+    }
+    {% if not gch_data %}
+    // Режим 1: активируем камеру
+    const captureBtn = document.getElementById('captureBtn');
+    if (captureBtn) {
+        captureBtn.addEventListener('click', () => cameraInput.click());
+    }
+    {% endif %}
 
     [cameraInput, galleryInput].forEach(input => {
         input.addEventListener('change', () => {
@@ -115,13 +201,19 @@
 
             const reader = new FileReader();
             reader.onload = (e) => {
-                document.getElementById('previewArea').innerHTML = `<img src="${e.target.result}" alt="Фото ГЧ">`;
+                const previewArea = document.getElementById('previewArea');
+                if (previewArea) {
+                    previewArea.innerHTML = `<img src="${e.target.result}" alt="Фото ГЧ">`;
+                } else {
+                    // Режим 2: обновляем фото
+                    const photoPreview = document.querySelector('.photo-preview img');
+                    if (photoPreview) photoPreview.src = e.target.result;
+                }
             };
             reader.readAsDataURL(file);
 
-            resultCard.style.display = 'block';
+            if (dataCard) dataCard.style.display = 'none';
             scanAnimation.style.display = 'block';
-            resultData.style.display = 'none';
 
             const formData = new FormData();
             formData.append('file', file);
@@ -135,11 +227,15 @@
                 .then(data => {
                     if (data.status === 'error') {
                         alert(data.message);
-                        resultCard.style.display = 'none';
+                        scanAnimation.style.display = 'none';
                         return;
                     }
                     scanAnimation.style.display = 'none';
-                    resultData.style.display = 'block';
+                    if (dataCard) dataCard.style.display = 'block';
+                    btnNext.disabled = false;
+                    btnNext.style.display = 'block';
+                    hasData = true;
+                    
                     document.getElementById('gchNumber').value = data.gch_number || 'НЕ НАЙДЕНО';
                     document.getElementById('gchProduct').value = data.found_product || 'НЕ НАЙДЕНО';
                     document.getElementById('gchRal').value = data.ral || '';
@@ -170,6 +266,10 @@
     function addManual() { currentNumbers.push(''); renderNumbers(); }
 
     async function goNext() {
+        if (!hasData) {
+            alert('⚠️ Сначала загрузите фото ГЧ!');
+            return;
+        }
         currentNumbers = currentNumbers.filter(n => n.trim());
         const params = new URLSearchParams(window.location.search);
         const orderId = params.get('order_id');
