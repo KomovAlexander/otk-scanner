@@ -199,15 +199,31 @@ def scan_document(image_path: str) -> dict:
     department = dept_match.group(1).strip() if dept_match else "НЕ НАЙДЕНО"
 
     # ── 3. Изделие ───────────────────────────────
+    # Ищем "Изделие:" и ближайший CTR-KV после него
     product_match = re.search(
         r"Изделие\s*:?\s*\n\s*(.+)",
         recognized_text, re.IGNORECASE,
     )
-    product_name = product_match.group(
-        1).strip() if product_match else "НЕ НАЙДЕНО"
+    if product_match:
+        product_name = product_match.group(1).strip()
+        # Если не похоже на изделие — ищем CTR-KV дальше
+        if "CTR" not in product_name.upper():
+            product_match = re.search(
+                r"CTR[.\-\s]?KV[.\-\s]?[A-ZА-Я0-9.\-]{2,}",
+                recognized_text, re.IGNORECASE,
+            )
+            product_name = product_match.group(
+                0).strip() if product_match else "НЕ НАЙДЕНО"
+    else:
+        # Запасной: ищем CTR-KV в любом месте
+        product_match = re.search(
+            r"CTR[.\-\s]?KV[.\-\s]?[A-ZА-Я0-9.\-]{2,}",
+            recognized_text, re.IGNORECASE,
+        )
+        product_name = product_match.group(
+            0).strip() if product_match else "НЕ НАЙДЕНО"
 
-    print(
-        f"\n>>> РЕЗУЛЬТАТ: заказ={order_number}, отдел={department}, изделие={product_name}")
+    print(f"\n>>> РЕЗУЛЬТАТ: заказ={order_number}, отдел={department}, изделие={product_name}")
 
     return {
         "order_number": order_number,
