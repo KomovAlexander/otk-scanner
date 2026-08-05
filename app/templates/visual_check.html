@@ -1,319 +1,243 @@
-<!DOCTYPE html>
-<html lang="ru">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Визуальный контроль — ОТК</title>
-    <link rel="stylesheet" href="/static/css/style.css">
-    <style>
-        .visual-body {
-            display: flex;
-            justify-content: center;
-            padding: 20px;
-        }
-        .visual-card {
-            width: 100%;
-            max-width: 700px;
-            background: #1e2128;
-            border-radius: 16px;
-            padding: 30px;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.5);
-        }
-        .visual-card h1 { font-size: 24px; margin-bottom: 6px; }
-        .visual-card .subtitle { color: #888; font-size: 14px; margin-bottom: 24px; }
+{% extends "base.html" %}
 
-        .info-row {
-            background: #2a2d35;
-            border: 1px solid #3a3d45;
-            border-radius: 12px;
-            padding: 14px;
-            margin-bottom: 20px;
-            font-size: 14px;
-        }
-        .info-row span { font-weight: 600; color: #ff6b35; }
+{% block title %}Визуальный контроль — ОТК{% endblock %}
 
-        .section-title {
-            font-size: 16px;
-            font-weight: 600;
-            margin: 24px 0 12px;
-            color: #ff6b35;
-        }
+{% block extra_css %}
+<style>
+    .size-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 10px;
+    }
+    .size-row .etalon {
+        font-size: 13px;
+        color: #888;
+        min-width: 120px;
+    }
+    .size-row input {
+        flex: 1;
+        padding: 10px 12px;
+        background: #2a2d35;
+        border: 1px solid #3a3d45;
+        border-radius: 8px;
+        color: #fff;
+        font-size: 15px;
+    }
+    .form-group { margin-bottom: 16px; }
+    .form-group label {
+        display: block;
+        font-size: 13px;
+        color: #888;
+        margin-bottom: 6px;
+    }
+    .form-group input, .form-group select {
+        width: 100%;
+        padding: 10px 12px;
+        background: #2a2d35;
+        border: 1px solid #3a3d45;
+        border-radius: 8px;
+        color: #fff;
+        font-size: 15px;
+    }
+    .deviation-list {
+        margin-top: 20px;
+        padding: 16px;
+        background: #2a2020;
+        border: 1px solid #f44336;
+        border-radius: 12px;
+        display: none;
+    }
+    .deviation-list h3 { color: #f44336; margin-bottom: 10px; }
+    .deviation-item { font-size: 13px; margin-bottom: 6px; color: #ffaaaa; }
+    .comment-box { display: none; margin-top: 8px; }
+    .comment-box textarea {
+        width: 100%;
+        padding: 8px 10px;
+        background: #2a2d35;
+        border: 1px solid #3a3d45;
+        border-radius: 6px;
+        color: #fff;
+        font-size: 13px;
+        resize: vertical;
+        min-height: 50px;
+    }
+</style>
+{% endblock %}
 
-        .form-group { margin-bottom: 16px; }
-        .form-group label {
-            display: block;
-            font-size: 13px;
-            color: #888;
-            margin-bottom: 6px;
-        }
-        .form-group input, .form-group select {
-            width: 100%;
-            padding: 10px 12px;
-            background: #2a2d35;
-            border: 1px solid #3a3d45;
-            border-radius: 8px;
-            color: #fff;
-            font-size: 15px;
-        }
-
-        .size-row {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            margin-bottom: 10px;
-        }
-        .size-row .etalon {
-            font-size: 13px;
-            color: #888;
-            min-width: 120px;
-        }
-        .size-row input {
-            flex: 1;
-            padding: 10px 12px;
-            background: #2a2d35;
-            border: 1px solid #3a3d45;
-            border-radius: 8px;
-            color: #fff;
-            font-size: 15px;
-        }
-        .match-ok { border-color: #4caf50 !important; background: #1e3a1e !important; }
-        .match-fail { border-color: #f44336 !important; background: #3a2020 !important; }
-
-        .btn-row {
-            display: flex;
-            gap: 12px;
-            margin-top: 24px;
-        }
-        .btn-next {
-            flex: 1;
-            padding: 14px;
-            background: #4caf50;
-            color: #fff;
-            border: none;
-            border-radius: 8px;
-            font-size: 16px;
-            font-weight: 600;
-            cursor: pointer;
-        }
-        .btn-next:hover { background: #388e3c; }
-        
-        .deviation-list {
-            margin-top: 20px;
-            padding: 16px;
-            background: #2a2020;
-            border: 1px solid #f44336;
-            border-radius: 12px;
-            display: none;
-        }
-        .deviation-list h3 { color: #f44336; margin-bottom: 10px; }
-        .deviation-item { font-size: 13px; margin-bottom: 6px; color: #ffaaaa; }
-        .comment-box { display: none; margin-top: 8px; }
-        .comment-box textarea {
-            width: 100%;
-            padding: 8px 10px;
-            background: #2a2d35;
-            border: 1px solid #3a3d45;
-            border-radius: 6px;
-            color: #fff;
-            font-size: 13px;
-            resize: vertical;
-            min-height: 50px;
-        }
-    </style>
-</head>
-<body class="visual-body">
-    <div class="visual-card">
+{% block content %}
+<div class="page-container">
+    <div class="page-header">
         <h1>🔍 Визуальный контроль</h1>
-        <p class="subtitle">Сверьте изделие с чертежом ГЧ и введите фактические значения</p>
+        <p>Сверьте изделие с чертежом ГЧ и введите фактические значения</p>
+    </div>
 
-        <div class="info-row">
-            <div><span>Изделие:</span> {{ order.product_name if order else '—' }}</div>
-            <div><span>Заказ №:</span> {{ order.order_number if order else '—' }}</div>
-        </div>
+    <div class="info-row">
+        <div><span>Изделие:</span> {{ order.product_name if order else '—' }}</div>
+        <div><span>Заказ №:</span> {{ order.order_number if order else '—' }}</div>
+    </div>
 
-        <!-- Соответствие ГЧ -->
-        <div class="section-title">📐 Соответствие чертежу</div>
-        <div class="form-group">
-            <label>Изделие соответствует ГЧ?</label>
-            <select id="matchGCH">
-                <option value="">— Выберите —</option>
-                <option value="yes">✅ Да, соответствует</option>
-                <option value="no">❌ Нет, есть отклонения</option>
-            </select>
-            <div class="comment-box" id="gchCommentBox">
-                <textarea placeholder="Опишите отклонения..."></textarea>
-            </div>
-        </div>
-
-        <!-- Габариты -->
-        <div class="section-title">📏 Габаритные размеры (эталон из ГЧ)</div>
-        {% if gch_sizes %}
-        {% for size in gch_sizes %}
-        <div class="size-row">
-            <span class="etalon">Эталон: {{ size }} мм</span>
-            <input type="number" class="size-input" data-etalon="{{ size }}"
-                   placeholder="Введите фактический размер"
-                   min="1" step="1" oninput="checkSize(this)">
-            <div class="comment-box">
-                <textarea placeholder="Причина отклонения..."></textarea>
-            </div>
-        </div>
-        {% endfor %}
-        {% else %}
-        <p style="color:#888;">Габариты не загружены</p>
-        {% endif %}
-
-        <!-- RAL -->
-        <div class="section-title">🎨 Цвет покрытия (эталон из ГЧ: {{ gch_ral }})</div>
-        <div class="form-group">
-            <input type="text" id="ralInput" value="" placeholder="Введите RAL"
-                   data-etalon="{{ gch_ral }}"
-                   oninput="checkRAL()">
-            <div class="comment-box" id="ralCommentBox">
-                <textarea placeholder="Причина несоответствия RAL..."></textarea>
-            </div>
-        </div>
-
-        <!-- Масса -->
-        <div class="section-title">⚖️ Масса</div>
-        <div class="form-group">
-            <input type="number" id="massInput" placeholder="Введите массу (кг)" step="0.1" min="0.1">
-        </div>
-
-        <!-- Несоответствия -->
-        <div id="deviationsBlock" class="deviation-list">
-            <h3>⚠️ Несоответствия для согласования с Конструктором</h3>
-            <div id="deviationsList"></div>
-        </div>
-
-        <!-- Кнопка -->
-        <div class="btn-row">
-            <button class="btn-next" onclick="goNext()">✅ Далее — к испытаниям</button>
+    <div class="section-title">📐 Соответствие чертежу</div>
+    <div class="form-group">
+        <label>Изделие соответствует ГЧ?</label>
+        <select id="matchGCH">
+            <option value="">— Выберите —</option>
+            <option value="yes">✅ Да, соответствует</option>
+            <option value="no">❌ Нет, есть отклонения</option>
+        </select>
+        <div class="comment-box" id="gchCommentBox">
+            <textarea placeholder="Опишите отклонения..."></textarea>
         </div>
     </div>
 
-    <script>
-        let deviations = [];
+    <div class="section-title">📏 Габаритные размеры (эталон из ГЧ)</div>
+    {% if gch_sizes %}
+    {% for size in gch_sizes %}
+    <div class="size-row">
+        <span class="etalon">Эталон: {{ size }} мм</span>
+        <input type="number" class="size-input" data-etalon="{{ size }}"
+               placeholder="Введите фактический размер" min="1" step="1" oninput="checkSize(this)">
+        <div class="comment-box">
+            <textarea placeholder="Причина отклонения..."></textarea>
+        </div>
+    </div>
+    {% endfor %}
+    {% else %}
+    <p style="color:#888;">Габариты не загружены</p>
+    {% endif %}
 
-        function checkSize(input) {
+    <div class="section-title">🎨 Цвет покрытия (эталон из ГЧ: {{ gch_ral }})</div>
+    <div class="form-group">
+        <input type="text" id="ralInput" value="" placeholder="Введите RAL"
+               data-etalon="{{ gch_ral }}" oninput="checkRAL()">
+        <div class="comment-box" id="ralCommentBox">
+            <textarea placeholder="Причина несоответствия RAL..."></textarea>
+        </div>
+    </div>
+
+    <div class="section-title">⚖️ Масса</div>
+    <div class="form-group">
+        <input type="number" id="massInput" placeholder="Введите массу (кг)" step="0.1" min="0.1">
+    </div>
+
+    <div id="deviationsBlock" class="deviation-list">
+        <h3>⚠️ Несоответствия для согласования с Конструктором</h3>
+        <div id="deviationsList"></div>
+    </div>
+
+    <button class="btn-next" onclick="goNext()">✅ Далее — к испытаниям</button>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    let deviations = [];
+
+    function checkSize(input) {
+        const etalon = input.dataset.etalon;
+        const value = input.value.trim();
+        const commentBox = input.parentElement.querySelector('.comment-box');
+        if (!value || parseInt(value) <= 0) {
+            input.classList.add('match-fail');
+            input.classList.remove('match-ok');
+            if (commentBox) commentBox.style.display = 'block';
+            updateDeviations();
+            return;
+        }
+        if (value === etalon) {
+            input.classList.add('match-ok');
+            input.classList.remove('match-fail');
+            if (commentBox) commentBox.style.display = 'none';
+        } else {
+            input.classList.add('match-fail');
+            input.classList.remove('match-ok');
+            if (commentBox) commentBox.style.display = 'block';
+        }
+        updateDeviations();
+    }
+
+    function checkRAL() {
+        const input = document.getElementById('ralInput');
+        const etalon = input.dataset.etalon;
+        const commentBox = document.getElementById('ralCommentBox');
+        if (!etalon || !input.value.trim()) {
+            input.classList.remove('match-ok', 'match-fail');
+            commentBox.style.display = 'none';
+            updateDeviations();
+            return;
+        }
+        if (input.value.trim() === etalon) {
+            input.classList.add('match-ok');
+            input.classList.remove('match-fail');
+            commentBox.style.display = 'none';
+        } else {
+            input.classList.add('match-fail');
+            input.classList.remove('match-ok');
+            commentBox.style.display = 'block';
+        }
+        updateDeviations();
+    }
+
+    function updateDeviations() {
+        deviations = [];
+        const gch = document.getElementById('matchGCH');
+        if (gch && gch.value === 'no') {
+            const comment = document.getElementById('gchCommentBox').querySelector('textarea')?.value || '';
+            deviations.push(`📐 Изделие НЕ соответствует ГЧ${comment ? ' — ' + comment : ''}`);
+        }
+        document.querySelectorAll('.size-input.match-fail').forEach(input => {
             const etalon = input.dataset.etalon;
             const value = input.value.trim();
-            const commentBox = input.parentElement.querySelector('.comment-box');
-
-            if (!value || parseInt(value) <= 0) {
-                input.classList.add('match-fail');
-                input.classList.remove('match-ok');
-                if (commentBox) commentBox.style.display = 'block';
-                updateDeviations();
-                return;
-            }
-
-            if (value === etalon) {
-                input.classList.add('match-ok');
-                input.classList.remove('match-fail');
-                if (commentBox) commentBox.style.display = 'none';
-            } else {
-                input.classList.add('match-fail');
-                input.classList.remove('match-ok');
-                if (commentBox) commentBox.style.display = 'block';
-            }
-            updateDeviations();
-        }
-
-        function checkRAL() {
-            const input = document.getElementById('ralInput');
-            const etalon = input.dataset.etalon;
-            const commentBox = document.getElementById('ralCommentBox');
-
-            if (!etalon || !input.value.trim()) {
-                input.classList.remove('match-ok', 'match-fail');
-                commentBox.style.display = 'none';
-                updateDeviations();
-                return;
-            }
-
-            if (input.value.trim() === etalon) {
-                input.classList.add('match-ok');
-                input.classList.remove('match-fail');
-                commentBox.style.display = 'none';
-            } else {
-                input.classList.add('match-fail');
-                input.classList.remove('match-ok');
-                commentBox.style.display = 'block';
-            }
-            updateDeviations();
-        }
-
-        function updateDeviations() {
-            deviations = [];
-
-            // ГЧ
-            const gch = document.getElementById('matchGCH');
-            if (gch && gch.value === 'no') {
-                const comment = document.getElementById('gchCommentBox').querySelector('textarea')?.value || '';
-                deviations.push(`📐 Изделие НЕ соответствует ГЧ${comment ? ' — ' + comment : ''}`);
-            }
-
-            // Габариты
-            document.querySelectorAll('.size-input.match-fail').forEach(input => {
-                const etalon = input.dataset.etalon;
-                const value = input.value.trim();
-                const comment = input.parentElement.querySelector('textarea')?.value || '';
-                deviations.push(`📏 Габарит: ожидается ${etalon} мм, введено ${value} мм${comment ? ' — ' + comment : ''}`);
-            });
-
-            // RAL
-            const ralInput = document.getElementById('ralInput');
-            if (ralInput && ralInput.classList.contains('match-fail')) {
-                const etalon = ralInput.dataset.etalon;
-                const comment = document.getElementById('ralCommentBox').querySelector('textarea')?.value || '';
-                deviations.push(`🎨 RAL: ожидается ${etalon}, введено ${ralInput.value}${comment ? ' — ' + comment : ''}`);
-            }
-
-            const block = document.getElementById('deviationsBlock');
-            const list = document.getElementById('deviationsList');
-            if (deviations.length > 0) {
-                list.innerHTML = deviations.map(d => `<div class="deviation-item">${d}</div>`).join('');
-                block.style.display = 'block';
-            } else {
-                block.style.display = 'none';
-            }
-        }
-
-        function goNext() {
-            const params = new URLSearchParams(window.location.search);
-            window.location.href = '/checklist?' + params.toString();
-        }
-
-        // Обработчик ГЧ
-        document.getElementById('matchGCH').addEventListener('change', function() {
-            const box = document.getElementById('gchCommentBox');
-            box.style.display = this.value === 'no' ? 'block' : 'none';
-            if (this.value === 'no') {
-                this.classList.add('match-fail');
-                this.classList.remove('match-ok');
-            } else if (this.value === 'yes') {
-                this.classList.add('match-ok');
-                this.classList.remove('match-fail');
-            } else {
-                this.classList.remove('match-ok', 'match-fail');
-            }
-            updateDeviations();
+            const comment = input.parentElement.querySelector('textarea')?.value || '';
+            deviations.push(`📏 Габарит: ожидается ${etalon} мм, введено ${value} мм${comment ? ' — ' + comment : ''}`);
         });
+        const ralInput = document.getElementById('ralInput');
+        if (ralInput && ralInput.classList.contains('match-fail')) {
+            const etalon = ralInput.dataset.etalon;
+            const comment = document.getElementById('ralCommentBox').querySelector('textarea')?.value || '';
+            deviations.push(`🎨 RAL: ожидается ${etalon}, введено ${ralInput.value}${comment ? ' — ' + comment : ''}`);
+        }
+        const block = document.getElementById('deviationsBlock');
+        const list = document.getElementById('deviationsList');
+        if (deviations.length > 0) {
+            list.innerHTML = deviations.map(d => `<div class="deviation-item">${d}</div>`).join('');
+            block.style.display = 'block';
+        } else {
+            block.style.display = 'none';
+        }
+    }
 
-        // Обработчик массы
-        document.getElementById('massInput').addEventListener('input', function() {
-            if (this.value && parseFloat(this.value) <= 0) {
-                this.value = '';
-                alert('⚠️ Масса должна быть больше 0!');
-            }
-            if (this.value && parseFloat(this.value) > 0) {
-                this.classList.add('match-ok');
-                this.classList.remove('match-fail');
-            } else {
-                this.classList.remove('match-ok', 'match-fail');
-            }
-        });
-    </script>
-</body>
-</html>
+    function goNext() {
+        const params = new URLSearchParams(window.location.search);
+        window.location.href = '/checklist?' + params.toString();
+    }
+
+    document.getElementById('matchGCH').addEventListener('change', function() {
+        const box = document.getElementById('gchCommentBox');
+        box.style.display = this.value === 'no' ? 'block' : 'none';
+        if (this.value === 'no') {
+            this.classList.add('match-fail');
+            this.classList.remove('match-ok');
+        } else if (this.value === 'yes') {
+            this.classList.add('match-ok');
+            this.classList.remove('match-fail');
+        } else {
+            this.classList.remove('match-ok', 'match-fail');
+        }
+        updateDeviations();
+    });
+
+    document.getElementById('massInput').addEventListener('input', function() {
+        if (this.value && parseFloat(this.value) <= 0) {
+            this.value = '';
+            alert('⚠️ Масса должна быть больше 0!');
+        }
+        if (this.value && parseFloat(this.value) > 0) {
+            this.classList.add('match-ok');
+            this.classList.remove('match-fail');
+        } else {
+            this.classList.remove('match-ok', 'match-fail');
+        }
+    });
+</script>
+{% endblock %}

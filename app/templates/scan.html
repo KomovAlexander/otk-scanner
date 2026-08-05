@@ -1,168 +1,129 @@
-<!DOCTYPE html>
-<html lang="ru">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Сканирование документа — ОТК</title>
-    <link rel="stylesheet" href="/static/css/style.css">
-</head>
-<body class="scan-body">
+{% extends "base.html" %}
 
-    <div class="scan-container">
+{% block title %}Сканирование заказа — ОТК{% endblock %}
 
-        <!-- Заголовок -->
-        <div class="scan-header">
-            <h1>Давай начнём испытания?</h1>
-            <p>Сфотографируйте заказ на производство. Система заполнит данные автоматически.</p>
-        </div>
-
-        <!-- Зона захвата -->
-        <div class="capture-zone" id="captureZone">
-            <div class="preview-area" id="previewArea">
-                <span class="camera-icon">📷</span>
-                <p>Нажмите чтобы сделать фото или перетащите файл</p>
-            </div>
-
-            <input type="file" id="cameraInput" name="file" accept="image/*" capture="environment" hidden>
-            <input type="file" id="galleryInput" name="file" accept="image/*" hidden>
-
-            <button class="btn-capture" id="captureBtn">📷 Сделать фото</button>
-            <label for="galleryInput" class="btn-upload">📁 Или загрузить файл</label>
-        </div>
-
-        <!-- Результат (скрыт изначально) -->
-        <div class="result-card" id="resultCard" style="display: none;">
-            <div class="scanning-animation" id="scanAnimation">
-                <div class="scan-line"></div>
-                <p>Идет распознавание… Анализ ячеек… Поиск номера заказа…</p>
-            </div>
-
-            <div class="result-data" id="resultData" style="display: none;">
-                <h2>Проверьте данные:</h2>
-
-                <div class="field-row">
-                    <span class="field-icon">📄</span>
-                    <span class="field-label">Заказ №</span>
-                    <input type="text" id="orderNumber" class="field-value" onfocus="this.blur()">
-                </div>
-
-                <div class="field-row">
-                    <span class="field-icon">🏭</span>
-                    <span class="field-label">Подразделение</span>
-                    <input type="text" id="department" class="field-value" onfocus="this.blur()">
-                </div>
-
-                <div class="field-row">
-                    <span class="field-icon">⚙️</span>
-                    <span class="field-label">Изделие</span>
-                    <input type="text" id="productName" class="field-value" onfocus="this.blur()">
-                </div>
-
-                <div class="confidence-bar">
-                    <span>Уверенность распознавания:</span>
-                    <span id="confidenceValue">0%</span>
-                </div>
-
-                <p class="confirm-question">Данные на фото совпадают?</p>
-                <div class="action-buttons">
-                    <button class="btn-primary" id="confirmYes">Да, всё верно. Продолжить →</button>
-                    <button class="btn-secondary" id="confirmNo">Нет, внести вручную</button>
-                </div>
-            </div>
-        </div>
-
+{% block content %}
+<div class="page-container">
+    <div class="page-header">
+        <h1>Давай начнём испытания?</h1>
+        <p>Сфотографируйте заказ на производство. Система заполнит данные автоматически.</p>
     </div>
 
-    <script>
-        const cameraInput = document.getElementById('cameraInput');
-        const galleryInput = document.getElementById('galleryInput');
-        const captureBtn = document.getElementById('captureBtn');
-        const resultCard = document.getElementById('resultCard');
-        const scanAnimation = document.getElementById('scanAnimation');
-        const resultData = document.getElementById('resultData');
-        let currentOrderId = null;
+    <div class="capture-zone">
+        <div class="preview-area" id="previewArea">
+            <span class="camera-icon">📷</span>
+            <p>Нажмите чтобы сделать фото</p>
+        </div>
+        <input type="file" id="cameraInput" accept="image/*" capture="environment" hidden>
+        <input type="file" id="galleryInput" accept="image/*" hidden>
+        <button class="btn-capture" id="captureBtn">📷 Сделать фото</button>
+        <label for="galleryInput" class="btn-upload">📁 Загрузить из галереи</label>
+    </div>
 
-        captureBtn.addEventListener('click', () => cameraInput.click());
+    <div class="result-card" id="resultCard" style="display: none;">
+        <div class="scanning-animation" id="scanAnimation">
+            <div class="scan-line"></div>
+            <p>Идет распознавание…</p>
+        </div>
+        <div class="result-data" id="resultData" style="display: none;">
+            <h2>Проверьте данные:</h2>
+            <div class="field-row">
+                <span class="field-icon">📄</span>
+                <span class="field-label">Заказ №</span>
+                <input type="text" id="orderNumber" class="field-value" onfocus="this.blur()">
+            </div>
+            <div class="field-row">
+                <span class="field-icon">🏭</span>
+                <span class="field-label">Подразделение</span>
+                <input type="text" id="department" class="field-value" onfocus="this.blur()">
+            </div>
+            <div class="field-row">
+                <span class="field-icon">⚙️</span>
+                <span class="field-label">Изделие</span>
+                <input type="text" id="productName" class="field-value" onfocus="this.blur()">
+            </div>
+            <p class="confirm-question" style="margin-top: 16px; font-weight: 600;">Данные на фото совпадают?</p>
+            <div class="action-buttons" style="display: flex; gap: 10px; margin-top: 12px;">
+                <button class="btn-primary" id="confirmYes" style="flex:1;">Да, всё верно. Продолжить →</button>
+                <button class="btn-secondary" id="confirmNo" style="flex:1;">Нет, внести вручную</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
 
-        [cameraInput, galleryInput].forEach(input => {
-            input.addEventListener('change', () => {
-                const file = input.files[0];
-                if (!file) return;
+{% block extra_js %}
+<script>
+    const cameraInput = document.getElementById('cameraInput');
+    const galleryInput = document.getElementById('galleryInput');
+    const captureBtn = document.getElementById('captureBtn');
+    const resultCard = document.getElementById('resultCard');
+    const scanAnimation = document.getElementById('scanAnimation');
+    const resultData = document.getElementById('resultData');
+    let currentOrderId = null;
 
-                const reader = new FileReader();
-                reader.onload = (e) => {
-                    document.getElementById('previewArea').innerHTML =
-                        `<img src="${e.target.result}" alt="Фото">`;
-                };
-                reader.readAsDataURL(file);
+    captureBtn.addEventListener('click', () => cameraInput.click());
 
-                resultCard.style.display = 'block';
-                scanAnimation.style.display = 'block';
-                resultData.style.display = 'none';
+    [cameraInput, galleryInput].forEach(input => {
+        input.addEventListener('change', () => {
+            const file = input.files[0];
+            if (!file) return;
 
-                const formData = new FormData();
-                formData.append('file', file);
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                document.getElementById('previewArea').innerHTML = `<img src="${e.target.result}" alt="Фото">`;
+            };
+            reader.readAsDataURL(file);
 
-                fetch('/api/scan', { method: 'POST', body: formData })
-                    .then(res => res.json())
-                    .then(data => {
-                        scanAnimation.style.display = 'none';
-                        resultData.style.display = 'block';
+            resultCard.style.display = 'block';
+            scanAnimation.style.display = 'block';
+            resultData.style.display = 'none';
 
-                        document.getElementById('orderNumber').value = data.order_number;
-                        document.getElementById('department').value = data.department;
-                        document.getElementById('productName').value = data.product_name;
-                        document.getElementById('confidenceValue').textContent =
-                            Math.round(data.confidence * 100) + '%';
-                        
-                        currentOrderId = data.order_id;
-                    })
-                    .catch(err => alert('Ошибка: ' + err));
+            const formData = new FormData();
+            formData.append('file', file);
+
+            fetch('/api/scan', { method: 'POST', body: formData })
+                .then(res => res.json())
+                .then(data => {
+                    scanAnimation.style.display = 'none';
+                    resultData.style.display = 'block';
+                    document.getElementById('orderNumber').value = data.order_number;
+                    document.getElementById('department').value = data.department;
+                    document.getElementById('productName').value = data.product_name;
+                    currentOrderId = data.order_id;
+                })
+                .catch(err => alert('Ошибка: ' + err));
+        });
+    });
+
+    document.getElementById('confirmYes').addEventListener('click', async () => {
+        const order = document.getElementById('orderNumber').value;
+        const product = document.getElementById('productName').value;
+        const department = document.getElementById('department').value;
+
+        if (order === 'НЕ НАЙДЕНО' || product === 'НЕ НАЙДЕНО') {
+            alert('⚠️ Заполните все поля!');
+            return;
+        }
+
+        if (currentOrderId) {
+            await fetch('/api/save-order', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ order_id: currentOrderId, order_number: order, product_name: product, department: department })
             });
+        }
+
+        let url = `/check-gch?order=${encodeURIComponent(order)}&product=${encodeURIComponent(product)}&department=${encodeURIComponent(department)}`;
+        if (currentOrderId) url += `&order_id=${currentOrderId}`;
+        window.location.href = url;
+    });
+
+    document.getElementById('confirmNo').addEventListener('click', () => {
+        ['orderNumber', 'department', 'productName'].forEach(id => {
+            document.getElementById(id).removeAttribute('onfocus');
         });
-        
-        // Да, всё верно
-        document.getElementById('confirmYes').addEventListener('click', async () => {
-            const order = document.getElementById('orderNumber').value;
-            const product = document.getElementById('productName').value;
-            const department = document.getElementById('department').value;
-
-            if (order === 'НЕ НАЙДЕНО' || product === 'НЕ НАЙДЕНО') {
-                alert('⚠️ Заполните все поля!');
-                return;
-            }
-
-            // Сохраняем отредактированные данные заказа
-            if (currentOrderId) {
-                await fetch('/api/save-order', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        order_id: currentOrderId,
-                        order_number: order,
-                        product_name: product,
-                        department: department
-                    })
-                });
-            }
-
-            let url = `/check-gch?order=${encodeURIComponent(order)}&product=${encodeURIComponent(product)}&department=${encodeURIComponent(department)}`;
-            if (currentOrderId) {
-                url += `&order_id=${currentOrderId}`;
-            }
-            window.location.href = url;
-        });
-
-        // Нет, внести вручную
-        document.getElementById('confirmNo').addEventListener('click', () => {
-            const fields = ['orderNumber', 'department', 'productName'];
-            fields.forEach(id => {
-                const input = document.getElementById(id);
-                input.removeAttribute('onfocus');
-            });
-            document.getElementById('confirmNo').style.display = 'none';
-        });
-    </script>
-
-</body>
-</html>
+        document.getElementById('confirmNo').style.display = 'none';
+    });
+</script>
+{% endblock %}

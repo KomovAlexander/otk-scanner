@@ -1,336 +1,195 @@
-<!DOCTYPE html>
-<html lang="ru">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Сканирование ГЧ — ОТК</title>
-    <link rel="stylesheet" href="/static/css/style.css">
-    <style>
-        .gch-body {
-            display: flex;
-            justify-content: center;
-            padding: 20px;
-        }
-        .gch-container {
-            width: 100%;
-            max-width: 700px;
-        }
-        .gch-header {
-            text-align: center;
-            margin-bottom: 24px;
-        }
-        .gch-header h1 { font-size: 24px; margin-bottom: 6px; }
-        .gch-header p { color: #888; font-size: 14px; }
+{% extends "base.html" %}
 
-        .capture-zone {
-            background: #1e2128;
-            border: 2px dashed #3a3d45;
-            border-radius: 16px;
-            padding: 30px 20px;
-            text-align: center;
-            transition: border 0.3s;
-        }
-        .capture-zone:hover { border-color: #ff6b35; }
-        .preview-area { margin-bottom: 20px; }
-        .preview-area img {
-            max-width: 100%;
-            max-height: 300px;
-            border-radius: 8px;
-        }
-        .camera-icon {
-            font-size: 56px;
-            display: block;
-            margin-bottom: 10px;
-        }
+{% block title %}Сканирование ГЧ — ОТК{% endblock %}
 
-        .btn-capture, .btn-upload, .btn-add {
-            display: inline-block;
-            padding: 14px 20px;
-            margin: 6px;
-            border-radius: 10px;
-            font-size: 15px;
-            cursor: pointer;
-            border: none;
-            text-decoration: none;
-            font-weight: 600;
-        }
-        .btn-capture { background: #ff6b35; color: #fff; width: calc(100% - 12px); }
-        .btn-upload { background: #2a2d35; color: #ccc; border: 1px solid #3a3d45; width: calc(100% - 12px); }
-        .btn-add { background: #4caf50; color: #fff; width: 100%; margin-top: 16px; }
+{% block extra_css %}
+<style>
+    .size-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 10px;
+    }
+    .size-row .etalon {
+        font-size: 13px;
+        color: #888;
+        min-width: 100px;
+    }
+    .size-row input {
+        flex: 1;
+        padding: 10px 12px;
+        background: #2a2d35;
+        border: 1px solid #3a3d45;
+        border-radius: 8px;
+        color: #fff;
+        font-size: 15px;
+    }
+    .btn-add {
+        padding: 10px 16px;
+        background: #4caf50;
+        color: #fff;
+        border: none;
+        border-radius: 8px;
+        font-size: 14px;
+        cursor: pointer;
+        margin-top: 10px;
+    }
+    .btn-remove {
+        padding: 8px 12px;
+        background: #f44336;
+        color: #fff;
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 14px;
+    }
+</style>
+{% endblock %}
 
-        .result-card {
-            margin-top: 24px;
-            background: #1e2128;
-            border-radius: 16px;
-            padding: 24px 18px;
-        }
-        .scanning-animation { text-align: center; padding: 20px; }
-        .scan-line {
-            height: 3px;
-            background: linear-gradient(90deg, transparent, #ff6b35, transparent);
-            animation: scanMove 1.5s infinite;
-            margin-bottom: 16px;
-        }
-        @keyframes scanMove {
-            0% { width: 0%; margin-left: 0%; }
-            50% { width: 100%; margin-left: 0%; }
-            100% { width: 0%; margin-left: 100%; }
-        }
-        .result-data h2 {
-            font-size: 18px;
-            margin-bottom: 16px;
-            text-align: center;
-        }
-
-        .number-row {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            margin-bottom: 10px;
-        }
-        .number-icon {
-            font-size: 20px;
-            width: 28px;
-            text-align: center;
-            flex-shrink: 0;
-        }
-        .number-label {
-            font-size: 13px;
-            color: #888;
-            min-width: 60px;
-            flex-shrink: 0;
-        }
-        .number-input {
-            flex: 1;
-            padding: 12px 14px;
-            background: #2a2d35;
-            border: 1px solid #3a3d45;
-            border-radius: 8px;
-            color: #fff;
-            font-size: 16px;
-            min-width: 0;
-        }
-        .btn-remove {
-            padding: 10px 14px;
-            background: #f44336;
-            color: #fff;
-            border: none;
-            border-radius: 8px;
-            cursor: pointer;
-            font-size: 16px;
-            flex-shrink: 0;
-        }
-
-        .empty-state {
-            text-align: center;
-            color: #888;
-            padding: 20px;
-            font-size: 15px;
-        }
-
-        .btn-next {
-            display: block;
-            width: 100%;
-            padding: 16px;
-            margin-top: 20px;
-            background: #4caf50;
-            color: #fff;
-            border: none;
-            border-radius: 10px;
-            font-size: 17px;
-            font-weight: 600;
-            cursor: pointer;
-        }
-        .btn-next:hover { background: #388e3c; }
-
-        @media (max-width: 480px) {
-            .gch-header h1 { font-size: 20px; }
-            .capture-zone { padding: 20px 14px; }
-            .camera-icon { font-size: 44px; }
-            .btn-capture, .btn-upload { font-size: 14px; padding: 14px; }
-            .number-input { font-size: 16px; padding: 14px; }
-            .btn-remove { padding: 12px; font-size: 18px; }
-        }
-    </style>
-</head>
-<body class="gch-body">
-    <div class="gch-container">
-        <div class="gch-header">
-            <h1>📐 Габаритный чертёж (ГЧ)</h1>
-            <p>Сфотографируйте ГЧ. Система найдёт размеры, выделенные цветным маркером.</p>
-        </div>
-
-        <div class="capture-zone">
-            <div class="preview-area" id="previewArea">
-                <span class="camera-icon">📷</span>
-                <p>Нажмите чтобы сделать фото</p>
-            </div>
-            <input type="file" id="cameraInput" accept="image/*" capture="environment" hidden>
-            <input type="file" id="galleryInput" accept="image/*" hidden>
-            <button class="btn-capture" id="captureBtn">📷 Сделать фото</button>
-            <label for="galleryInput" class="btn-upload">📁 Загрузить из галереи</label>
-        </div>
-
-        <div class="result-card" id="resultCard" style="display: none;">
-            <div class="scanning-animation" id="scanAnimation">
-                <div class="scan-line"></div>
-                <p>Идет распознавание…</p>
-            </div>
-            <div class="result-data" id="resultData" style="display: none;">
-                <h2>Проверьте данные:</h2>
-                
-                <div class="field-row">
-                    <span class="field-icon">📄</span>
-                    <span class="field-label">Номер ГЧ</span>
-                    <input type="text" id="gchNumber" class="field-value" onfocus="this.blur()">
-                </div>
-                
-                <div class="field-row">
-                    <span class="field-icon">⚙️</span>
-                    <span class="field-label">Изделие</span>
-                    <input type="text" id="gchProduct" class="field-value" onfocus="this.blur()">
-                </div>
-                <div class="field-row">
-                    <span class="field-icon">🎨</span>
-                    <span class="field-label">RAL</span>
-                    <input type="text" id="gchRal" class="field-value" 
-                           onfocus="this.removeAttribute('onfocus')"
-                           oninput="validateRal(this)"
-                           maxlength="4"
-                           placeholder="Например: 6009">
-                </div>
-
-                <h3 style="margin-top: 20px;">📏 Габаритные размеры:</h3>
-                <div id="numbersList"></div>
-                <button class="btn-add" onclick="addManual()">+ Добавить размер вручную</button>
-                <button class="btn-next" onclick="goNext()">Далее →</button>
-            </div>
-        </div>
+{% block content %}
+<div class="page-container">
+    <div class="page-header">
+        <h1>📐 Габаритный чертёж (ГЧ)</h1>
+        <p>Сфотографируйте ГЧ. Система найдёт размеры, выделенные цветным маркером.</p>
     </div>
 
-    <script>
-        const cameraInput = document.getElementById('cameraInput');
-        const galleryInput = document.getElementById('galleryInput');
-        const captureBtn = document.getElementById('captureBtn');
-        const resultCard = document.getElementById('resultCard');
-        const scanAnimation = document.getElementById('scanAnimation');
-        const resultData = document.getElementById('resultData');
-        let currentNumbers = [];
+    <div class="capture-zone">
+        <div class="preview-area" id="previewArea">
+            <span class="camera-icon">📷</span>
+            <p>Нажмите чтобы сделать фото</p>
+        </div>
+        <input type="file" id="cameraInput" accept="image/*" capture="environment" hidden>
+        <input type="file" id="galleryInput" accept="image/*" hidden>
+        <button class="btn-capture" id="captureBtn">📷 Сделать фото</button>
+        <label for="galleryInput" class="btn-upload">📁 Загрузить из галереи</label>
+    </div>
 
-        captureBtn.addEventListener('click', () => cameraInput.click());
+    <div class="result-card" id="resultCard" style="display: none;">
+        <div class="scanning-animation" id="scanAnimation">
+            <div class="scan-line"></div>
+            <p>Идет распознавание…</p>
+        </div>
+        <div class="result-data" id="resultData" style="display: none;">
+            <h2>Проверьте данные:</h2>
+            <div class="field-row">
+                <span class="field-icon">📄</span>
+                <span class="field-label">Номер ГЧ</span>
+                <input type="text" id="gchNumber" class="field-value" onfocus="this.blur()">
+            </div>
+            <div class="field-row">
+                <span class="field-icon">⚙️</span>
+                <span class="field-label">Изделие</span>
+                <input type="text" id="gchProduct" class="field-value" onfocus="this.blur()">
+            </div>
+            <div class="field-row">
+                <span class="field-icon">🎨</span>
+                <span class="field-label">RAL</span>
+                <input type="text" id="gchRal" class="field-value" onfocus="this.blur()">
+            </div>
 
-        [cameraInput, galleryInput].forEach(input => {
-            input.addEventListener('change', () => {
-                const file = input.files[0];
-                if (!file) return;
+            <h3 style="margin-top: 20px;">📏 Габаритные размеры:</h3>
+            <div id="numbersList"></div>
+            <button class="btn-add" onclick="addManual()">+ Добавить размер вручную</button>
+            <button class="btn-next" onclick="goNext()">Далее →</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
 
-                const reader = new FileReader();
-                reader.onload = (e) => {
-                    document.getElementById('previewArea').innerHTML =
-                        `<img src="${e.target.result}" alt="Фото ГЧ">`;
-                };
-                reader.readAsDataURL(file);
+{% block extra_js %}
+<script>
+    const cameraInput = document.getElementById('cameraInput');
+    const galleryInput = document.getElementById('galleryInput');
+    const captureBtn = document.getElementById('captureBtn');
+    const resultCard = document.getElementById('resultCard');
+    const scanAnimation = document.getElementById('scanAnimation');
+    const resultData = document.getElementById('resultData');
+    let currentNumbers = [];
 
-                resultCard.style.display = 'block';
-                scanAnimation.style.display = 'block';
-                resultData.style.display = 'none';
+    captureBtn.addEventListener('click', () => cameraInput.click());
 
-                const formData = new FormData();
-                formData.append('file', file);
-                const params = new URLSearchParams(window.location.search);
-                const orderId = params.get('order_id');
-                const url = orderId ? `/api/scan-gch?order_id=${orderId}` : '/api/scan-gch';
-                if (orderId) {
-                    formData.append('order_id', orderId);
-                }
-                fetch(url, { method: 'POST', body: formData })
-                    .then(res => res.json())
-                    .then(data => {
-                        if (data.status === 'error') {
-                            alert(data.message);
-                            resultCard.style.display = 'none';
-                            return;
-                        }
-                        scanAnimation.style.display = 'none';
-                        resultData.style.display = 'block';
-                        
-                        document.getElementById('gchNumber').value = data.gch_number || 'НЕ НАЙДЕНО';
-                        document.getElementById('gchProduct').value = data.found_product || 'НЕ НАЙДЕНО';
-                        document.getElementById('gchRal').value = data.ral || 'НЕ НАЙДЕНО';                      
-                        currentNumbers = data.numbers || [];
-                        renderNumbers();
-                    })
-                    .catch(err => alert('Ошибка: ' + err));
-            });
-        });
+    [cameraInput, galleryInput].forEach(input => {
+        input.addEventListener('change', () => {
+            const file = input.files[0];
+            if (!file) return;
 
-        function renderNumbers() {
-            const list = document.getElementById('numbersList');
-            if (!currentNumbers || currentNumbers.length === 0) {
-                list.innerHTML = '<div class="empty-state">📏 Цветные размеры не найдены<br>Добавьте вручную</div>';
-                return;
-            }
-            list.innerHTML = currentNumbers.map((n, i) => `
-                <div class="number-row">
-                    <span class="number-icon">📏</span>
-                    <span class="number-label">Размер ${i+1}</span>
-                    <input type="text" class="number-input" value="${n}" 
-                           oninput="updateNumber(${i}, this.value)">
-                    <button class="btn-remove" onclick="removeNumber(${i})">✕</button>
-                </div>
-            `).join('');
-        }
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                document.getElementById('previewArea').innerHTML = `<img src="${e.target.result}" alt="Фото ГЧ">`;
+            };
+            reader.readAsDataURL(file);
 
-        function updateNumber(index, value) {
-            currentNumbers[index] = value;
-        }
+            resultCard.style.display = 'block';
+            scanAnimation.style.display = 'block';
+            resultData.style.display = 'none';
 
-        function removeNumber(index) {
-            currentNumbers.splice(index, 1);
-            renderNumbers();
-        }
+            const formData = new FormData();
+            formData.append('file', file);
 
-        function addManual() {
-            currentNumbers.push('');
-            renderNumbers();
-            const inputs = document.querySelectorAll('.number-input');
-            if (inputs.length > 0) inputs[inputs.length - 1].focus();
-        }
-
-        async function goNext() {
-            currentNumbers = currentNumbers.filter(n => n.trim());
             const params = new URLSearchParams(window.location.search);
             const orderId = params.get('order_id');
+            const url = orderId ? `/api/scan-gch?order_id=${orderId}` : '/api/scan-gch';
 
-            // Сохраняем отредактированные данные в БД
-            if (orderId) {
-                const gchNumber = document.getElementById('gchNumber').value;
-                const ral = document.getElementById('gchRal').value;
-                
-                await fetch('/api/save-gch', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        order_id: parseInt(orderId),
-                        gch_number: gchNumber,
-                        ral: ral,
-                        sizes: currentNumbers
-                    })
-                });
-            }
+            fetch(url, { method: 'POST', body: formData })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.status === 'error') {
+                        alert(data.message);
+                        resultCard.style.display = 'none';
+                        return;
+                    }
+                    scanAnimation.style.display = 'none';
+                    resultData.style.display = 'block';
+                    document.getElementById('gchNumber').value = data.gch_number || 'НЕ НАЙДЕНО';
+                    document.getElementById('gchProduct').value = data.found_product || 'НЕ НАЙДЕНО';
+                    document.getElementById('gchRal').value = data.ral || '';
+                    currentNumbers = data.numbers || [];
+                    renderNumbers();
+                })
+                .catch(err => alert('Ошибка: ' + err));
+        });
+    });
 
-            params.set('gch_sizes', currentNumbers.join(','));
-            params.set('gch_ral', document.getElementById('gchRal').value);
-            window.location.href = '/check-g3?' + params.toString();
+    function renderNumbers() {
+        const list = document.getElementById('numbersList');
+        if (!currentNumbers || currentNumbers.length === 0) {
+            list.innerHTML = '<p style="color:#888;">Размеры не найдены</p>';
+            return;
         }
-        function validateRal(input) {
-            // Удаляем всё кроме цифр
-            input.value = input.value.replace(/[^0-9]/g, '');
-            // Ограничиваем 4 символами
-            if (input.value.length > 4) {
-                input.value = input.value.slice(0, 4);
-            }
-        }        
-    </script>
-</body>
-</html>
+        list.innerHTML = currentNumbers.map((n, i) => `
+            <div class="size-row">
+                <span class="etalon">Размер ${i+1}</span>
+                <input type="text" value="${n}" oninput="updateNumber(${i}, this.value)">
+                <button class="btn-remove" onclick="removeNumber(${i})">✕</button>
+            </div>
+        `).join('');
+    }
+
+    function updateNumber(index, value) { currentNumbers[index] = value; }
+    function removeNumber(index) { currentNumbers.splice(index, 1); renderNumbers(); }
+    function addManual() { currentNumbers.push(''); renderNumbers(); }
+
+    async function goNext() {
+        currentNumbers = currentNumbers.filter(n => n.trim());
+        const params = new URLSearchParams(window.location.search);
+        const orderId = params.get('order_id');
+
+        if (orderId) {
+            await fetch('/api/save-gch', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    order_id: parseInt(orderId),
+                    gch_number: document.getElementById('gchNumber').value,
+                    ral: document.getElementById('gchRal').value,
+                    sizes: currentNumbers
+                })
+            });
+        }
+
+        params.set('gch_sizes', currentNumbers.join(','));
+        params.set('gch_ral', document.getElementById('gchRal').value);
+        window.location.href = '/check-g3?' + params.toString();
+    }
+</script>
+{% endblock %}

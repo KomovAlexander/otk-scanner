@@ -1,320 +1,192 @@
-<!DOCTYPE html>
-<html lang="ru">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Сканирование Г3 — ОТК</title>
-    <link rel="stylesheet" href="/static/css/style.css">
-    <style>
-        .g3-body {
-            display: flex;
-            justify-content: center;
-            padding: 20px;
-        }
-        .g3-container {
-            width: 100%;
-            max-width: 700px;
-        }
-        .g3-header {
-            text-align: center;
-            margin-bottom: 24px;
-        }
-        .g3-header h1 { font-size: 24px; margin-bottom: 6px; }
-        .g3-header p { color: #888; font-size: 14px; }
+{% extends "base.html" %}
 
-        .capture-zone {
-            background: #1e2128;
-            border: 2px dashed #3a3d45;
-            border-radius: 16px;
-            padding: 30px 20px;
-            text-align: center;
-        }
-        .preview-area { margin-bottom: 20px; }
-        .preview-area img {
-            max-width: 100%;
-            max-height: 300px;
-            border-radius: 8px;
-        }
-        .camera-icon { font-size: 56px; display: block; margin-bottom: 10px; }
+{% block title %}Сканирование Г3 — ОТК{% endblock %}
 
-        .btn-capture, .btn-upload {
-            display: inline-block;
-            padding: 14px 20px;
-            margin: 6px;
-            border-radius: 10px;
-            font-size: 15px;
-            cursor: pointer;
-            border: none;
-            font-weight: 600;
-            width: calc(100% - 12px);
-        }
-        .btn-capture { background: #ff6b35; color: #fff; }
-        .btn-upload { background: #2a2d35; color: #ccc; border: 1px solid #3a3d45; }
+{% block extra_css %}
+<style>
+    .param-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 16px;
+    }
+    .param-table th, .param-table td {
+        padding: 8px 6px;
+        text-align: left;
+        font-size: 13px;
+        border-bottom: 1px solid #2a2d35;
+    }
+    .param-table th { color: #ff6b35; }
+    .param-table input {
+        width: 100%;
+        padding: 8px 10px;
+        background: #2a2d35;
+        border: 1px solid #3a3d45;
+        border-radius: 6px;
+        color: #fff;
+        font-size: 13px;
+    }
+    .param-table input.param-name { min-width: 200px; }
+    .param-table input.param-value { width: 70px; text-align: center; }
+    .param-table input.param-unit { width: 60px; text-align: center; }
+    .param-table input.param-tolerance { width: 80px; text-align: center; }
+    .btn-add {
+        padding: 10px 16px;
+        background: #4caf50;
+        color: #fff;
+        border: none;
+        border-radius: 8px;
+        font-size: 14px;
+        cursor: pointer;
+        margin-right: 10px;
+    }
+    .btn-delete {
+        padding: 6px 10px;
+        background: #f44336;
+        color: #fff;
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 12px;
+    }
+</style>
+{% endblock %}
 
-        .result-card {
-            margin-top: 24px;
-            background: #1e2128;
-            border-radius: 16px;
-            padding: 24px 18px;
-        }
-        .scanning-animation { text-align: center; padding: 20px; }
-        .scan-line {
-            height: 3px;
-            background: linear-gradient(90deg, transparent, #ff6b35, transparent);
-            animation: scanMove 1.5s infinite;
-            margin-bottom: 16px;
-        }
-        @keyframes scanMove {
-            0% { width: 0%; margin-left: 0%; }
-            50% { width: 100%; margin-left: 0%; }
-            100% { width: 0%; margin-left: 100%; }
-        }
-
-        .field-row {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            margin-bottom: 10px;
-        }
-        .field-icon { font-size: 20px; width: 28px; text-align: center; flex-shrink: 0; }
-        .field-label { font-size: 13px; color: #888; min-width: 60px; flex-shrink: 0; }
-        .field-value {
-            flex: 1;
-            padding: 12px 14px;
-            background: #2a2d35;
-            border: 1px solid #3a3d45;
-            border-radius: 8px;
-            color: #fff;
-            font-size: 16px;
-        }
-
-        .param-table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 16px;
-        }
-        .param-table th, .param-table td {
-            padding: 8px 6px;
-            text-align: left;
-            font-size: 13px;
-            border-bottom: 1px solid #2a2d35;
-        }
-        .param-table th { color: #ff6b35; }
-        .param-table input {
-            width: 100%;
-            padding: 8px 10px;
-            background: #2a2d35;
-            border: 1px solid #3a3d45;
-            border-radius: 6px;
-            color: #fff;
-            font-size: 13px;
-        }
-        .param-table input.param-name { min-width: 200px; }
-        .param-table input.param-value { width: 70px; text-align: center; }
-        .param-table input.param-unit { width: 60px; text-align: center; }
-        .param-table input.param-tolerance { width: 80px; text-align: center; }
-
-        .btn-row {
-            display: flex;
-            gap: 10px;
-            margin-top: 16px;
-        }
-        .btn-add {
-            flex: 1;
-            padding: 12px;
-            background: #4caf50;
-            color: #fff;
-            border: none;
-            border-radius: 8px;
-            font-size: 14px;
-            cursor: pointer;
-        }
-        .btn-next {
-            flex: 1;
-            padding: 12px;
-            background: #ff6b35;
-            color: #fff;
-            border: none;
-            border-radius: 8px;
-            font-size: 14px;
-            cursor: pointer;
-        }
-        .btn-delete {
-            padding: 6px 10px;
-            background: #f44336;
-            color: #fff;
-            border: none;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 12px;
-        }
-    </style>
-</head>
-<body class="g3-body">
-    <div class="g3-container">
-        <div class="g3-header">
-            <h1>🔧 Гидравлическая схема (Г3)</h1>
-            <p>Сфотографируйте Г3. Система извлечёт технические параметры.</p>
-        </div>
-
-        <div class="capture-zone">
-            <div class="preview-area" id="previewArea">
-                <span class="camera-icon">📷</span>
-                <p>Нажмите чтобы сделать фото</p>
-            </div>
-            <input type="file" id="cameraInput" accept="image/*" capture="environment" hidden>
-            <input type="file" id="galleryInput" accept="image/*" hidden>
-            <button class="btn-capture" id="captureBtn">📷 Сделать фото</button>
-            <label for="galleryInput" class="btn-upload">📁 Загрузить из галереи</label>
-        </div>
-
-        <div class="result-card" id="resultCard" style="display: none;">
-            <div class="scanning-animation" id="scanAnimation">
-                <div class="scan-line"></div>
-                <p>Идет распознавание… Извлечение параметров…</p>
-            </div>
-            <div class="result-data" id="resultData" style="display: none;">
-                <h2>Проверьте данные:</h2>
-                
-                <div class="field-row">
-                    <span class="field-icon">📄</span>
-                    <span class="field-label">Номер Г3</span>
-                    <input type="text" id="g3Number" class="field-value" onfocus="this.removeAttribute('onfocus')">
-                </div>
-                <div class="field-row">
-                    <span class="field-icon">⚙️</span>
-                    <span class="field-label">Изделие</span>
-                    <input type="text" id="g3Product" class="field-value" onfocus="this.removeAttribute('onfocus')">
-                </div>
-
-                <h3 style="margin-top: 20px;">📊 Параметры (редактируемые):</h3>
-                <table class="param-table">
-                    <thead>
-                        <tr>
-                            <th>Параметр</th>
-                            <th>Значение</th>
-                            <th>Ед.</th>
-                            <th>Допуск</th>
-                            <th></th>
-                        </tr>
-                    </thead>
-                    <tbody id="paramsBody"></tbody>
-                </table>
-
-                <div class="btn-row">
-                    <button class="btn-add" onclick="addParam()">+ Добавить параметр</button>
-                    <button class="btn-next" onclick="goNext()">Далее →</button>
-                </div>
-            </div>
-        </div>
+{% block content %}
+<div class="page-container">
+    <div class="page-header">
+        <h1>🔧 Гидравлическая схема (Г3)</h1>
+        <p>Сфотографируйте Г3. Система извлечёт технические параметры.</p>
     </div>
 
-    <script>
-        const cameraInput = document.getElementById('cameraInput');
-        const galleryInput = document.getElementById('galleryInput');
-        const captureBtn = document.getElementById('captureBtn');
-        const resultCard = document.getElementById('resultCard');
-        const scanAnimation = document.getElementById('scanAnimation');
-        const resultData = document.getElementById('resultData');
-        let currentParams = [];
+    <div class="capture-zone">
+        <div class="preview-area" id="previewArea">
+            <span class="camera-icon">📷</span>
+            <p>Нажмите чтобы сделать фото</p>
+        </div>
+        <input type="file" id="cameraInput" accept="image/*" capture="environment" hidden>
+        <input type="file" id="galleryInput" accept="image/*" hidden>
+        <button class="btn-capture" id="captureBtn">📷 Сделать фото</button>
+        <label for="galleryInput" class="btn-upload">📁 Загрузить из галереи</label>
+    </div>
 
-        captureBtn.addEventListener('click', () => cameraInput.click());
+    <div class="result-card" id="resultCard" style="display: none;">
+        <div class="scanning-animation" id="scanAnimation">
+            <div class="scan-line"></div>
+            <p>Идет распознавание… Извлечение параметров…</p>
+        </div>
+        <div class="result-data" id="resultData" style="display: none;">
+            <h2>Проверьте данные:</h2>
+            <div class="field-row">
+                <span class="field-icon">📄</span>
+                <span class="field-label">Номер Г3</span>
+                <input type="text" id="g3Number" class="field-value" onfocus="this.removeAttribute('onfocus')">
+            </div>
+            <div class="field-row">
+                <span class="field-icon">⚙️</span>
+                <span class="field-label">Изделие</span>
+                <input type="text" id="g3Product" class="field-value" onfocus="this.removeAttribute('onfocus')">
+            </div>
 
-        [cameraInput, galleryInput].forEach(input => {
-            input.addEventListener('change', () => {
-                const file = input.files[0];
-                if (!file) return;
+            <h3 style="margin-top: 20px;">📊 Параметры (редактируемые):</h3>
+            <table class="param-table">
+                <thead>
+                    <tr><th>Параметр</th><th>Значение</th><th>Ед.</th><th>Допуск</th><th></th></tr>
+                </thead>
+                <tbody id="paramsBody"></tbody>
+            </table>
 
-                const reader = new FileReader();
-                reader.onload = (e) => {
-                    document.getElementById('previewArea').innerHTML =
-                        `<img src="${e.target.result}" alt="Фото Г3">`;
-                };
-                reader.readAsDataURL(file);
+            <button class="btn-add" onclick="addParam()" style="margin-top: 10px;">+ Добавить параметр</button>
+            <button class="btn-next" onclick="goNext()">Далее →</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
 
-                resultCard.style.display = 'block';
-                scanAnimation.style.display = 'block';
-                resultData.style.display = 'none';
+{% block extra_js %}
+<script>
+    const cameraInput = document.getElementById('cameraInput');
+    const galleryInput = document.getElementById('galleryInput');
+    const captureBtn = document.getElementById('captureBtn');
+    const resultCard = document.getElementById('resultCard');
+    const scanAnimation = document.getElementById('scanAnimation');
+    const resultData = document.getElementById('resultData');
+    let currentParams = [];
 
-                const formData = new FormData();
-                formData.append('file', file);
+    captureBtn.addEventListener('click', () => cameraInput.click());
 
-                const params = new URLSearchParams(window.location.search);
-                const orderId = params.get('order_id');
-                const url = orderId ? `/api/scan-g3?order_id=${orderId}` : '/api/scan-g3';
+    [cameraInput, galleryInput].forEach(input => {
+        input.addEventListener('change', () => {
+            const file = input.files[0];
+            if (!file) return;
 
-                fetch(url, { method: 'POST', body: formData })
-                    .then(res => res.json())
-                    .then(data => {
-                        if (data.status === 'error') {
-                            alert(data.message);
-                            resultCard.style.display = 'none';
-                            return;
-                        }
-                        scanAnimation.style.display = 'none';
-                        resultData.style.display = 'block';
-                        
-                        document.getElementById('g3Number').value = data.g3_number || 'НЕ НАЙДЕНО';
-                        document.getElementById('g3Product').value = data.found_product || 'НЕ НАЙДЕНО';
-                        
-                        currentParams = data.params || [];
-                        renderParams();
-                    })
-                    .catch(err => alert('Ошибка: ' + err));
-            });
-        });
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                document.getElementById('previewArea').innerHTML = `<img src="${e.target.result}" alt="Фото Г3">`;
+            };
+            reader.readAsDataURL(file);
 
-        function renderParams() {
-            const tbody = document.getElementById('paramsBody');
-            if (!currentParams || currentParams.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#888;">Параметры не найдены</td></tr>';
-                return;
-            }
-            tbody.innerHTML = currentParams.map((p, i) => `
-                <tr>
-                    <td><input type="text" class="param-name" value="${p.name || ''}" oninput="updateParam(${i}, 'name', this.value)"></td>
-                    <td><input type="text" class="param-value" value="${p.value || ''}" oninput="updateParam(${i}, 'value', this.value)"></td>
-                    <td><input type="text" class="param-unit" value="${p.unit || ''}" oninput="updateParam(${i}, 'unit', this.value)"></td>
-                    <td><input type="text" class="param-tolerance" value="${p.tolerance || ''}" oninput="updateParam(${i}, 'tolerance', this.value)"></td>
-                    <td><button class="btn-delete" onclick="deleteParam(${i})">✕</button></td>
-                </tr>
-            `).join('');
-        }
+            resultCard.style.display = 'block';
+            scanAnimation.style.display = 'block';
+            resultData.style.display = 'none';
 
-        function updateParam(index, field, value) {
-            if (!currentParams[index]) return;
-            currentParams[index][field] = value;
-        }
+            const formData = new FormData();
+            formData.append('file', file);
 
-        function deleteParam(index) {
-            currentParams.splice(index, 1);
-            renderParams();
-        }
-
-        function addParam() {
-            currentParams.push({ name: '', value: '', unit: '', tolerance: '', type: '' });
-            renderParams();
-        }
-
-        async function goNext() {
             const params = new URLSearchParams(window.location.search);
             const orderId = params.get('order_id');
+            const url = orderId ? `/api/scan-g3?order_id=${orderId}` : '/api/scan-g3';
 
-            if (orderId) {
-                const g3Number = document.getElementById('g3Number').value;
-                await fetch('/api/save-g3', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        order_id: parseInt(orderId),
-                        g3_number: g3Number,
-                        params: currentParams
-                    })
-                });
-            }
+            fetch(url, { method: 'POST', body: formData })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.status === 'error') {
+                        alert(data.message);
+                        resultCard.style.display = 'none';
+                        return;
+                    }
+                    scanAnimation.style.display = 'none';
+                    resultData.style.display = 'block';
+                    document.getElementById('g3Number').value = data.g3_number || 'НЕ НАЙДЕНО';
+                    document.getElementById('g3Product').value = data.found_product || 'НЕ НАЙДЕНО';
+                    currentParams = data.params || [];
+                    renderParams();
+                })
+                .catch(err => alert('Ошибка: ' + err));
+        });
+    });
 
-            window.location.href = '/check-pg3?' + params.toString();
+    function renderParams() {
+        const tbody = document.getElementById('paramsBody');
+        if (!currentParams || currentParams.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#888;">Параметры не найдены</td></tr>';
+            return;
         }
-    </script>
-</body>
-</html>
+        tbody.innerHTML = currentParams.map((p, i) => `
+            <tr>
+                <td><input type="text" class="param-name" value="${p.name || ''}" oninput="updateParam(${i}, 'name', this.value)"></td>
+                <td><input type="text" class="param-value" value="${p.value || ''}" oninput="updateParam(${i}, 'value', this.value)"></td>
+                <td><input type="text" class="param-unit" value="${p.unit || ''}" oninput="updateParam(${i}, 'unit', this.value)"></td>
+                <td><input type="text" class="param-tolerance" value="${p.tolerance || ''}" oninput="updateParam(${i}, 'tolerance', this.value)"></td>
+                <td><button class="btn-delete" onclick="deleteParam(${i})">✕</button></td>
+            </tr>
+        `).join('');
+    }
+
+    function updateParam(index, field, value) { if (!currentParams[index]) return; currentParams[index][field] = value; }
+    function deleteParam(index) { currentParams.splice(index, 1); renderParams(); }
+    function addParam() { currentParams.push({ name: '', value: '', unit: '', tolerance: '', type: '' }); renderParams(); }
+
+    async function goNext() {
+        const params = new URLSearchParams(window.location.search);
+        const orderId = params.get('order_id');
+        if (orderId) {
+            await fetch('/api/save-g3', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ order_id: parseInt(orderId), g3_number: document.getElementById('g3Number').value, params: currentParams })
+            });
+        }
+        window.location.href = '/check-pg3?' + params.toString();
+    }
+</script>
+{% endblock %}
