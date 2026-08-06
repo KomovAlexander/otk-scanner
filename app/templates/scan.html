@@ -2,6 +2,29 @@
 
 {% block title %}Сканирование заказа — ОТК{% endblock %}
 
+{% block extra_css %}
+<style>
+    .photo-preview {
+        text-align: center;
+        margin-bottom: 16px;
+    }
+    .photo-preview img {
+        max-width: 100%;
+        max-height: 300px;
+        border-radius: 8px;
+    }
+    .saved-badge {
+        display: inline-block;
+        background: #1e3a1e;
+        color: #4caf50;
+        padding: 4px 10px;
+        border-radius: 6px;
+        font-size: 12px;
+        margin-left: 8px;
+    }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="page-container">
     <div class="page-header">
@@ -9,6 +32,20 @@
         <p>Сфотографируйте заказ на производство. Система заполнит данные автоматически.</p>
     </div>
 
+    {% if saved_photo and order_data %}
+    <!-- РЕЖИМ 2: заказ уже был — показываем фото -->
+    <div class="capture-zone">
+        <div class="photo-preview">
+            <img src="{{ saved_photo }}" alt="Фото заказа">
+        </div>
+        <button class="btn-capture" onclick="document.getElementById('cameraInput').click()">📷 Переснять</button>
+        <label for="galleryInput" class="btn-upload">📁 Другой файл</label>
+    </div>
+    <input type="file" id="cameraInput" accept="image/*" capture="environment" hidden>
+    <input type="file" id="galleryInput" accept="image/*" hidden>
+
+    {% else %}
+    <!-- РЕЖИМ 1: первый раз — только камера -->
     <div class="capture-zone">
         <div class="preview-area" id="previewArea">
             <span class="camera-icon">📷</span>
@@ -19,35 +56,38 @@
         <button class="btn-capture" id="captureBtn">📷 Сделать фото</button>
         <label for="galleryInput" class="btn-upload">📁 Загрузить из галереи</label>
     </div>
+    {% endif %}
 
-    <div class="result-card" id="resultCard" style="display: none;">
-        <div class="scanning-animation" id="scanAnimation">
-            <div class="scan-line"></div>
-            <p>Идет распознавание…</p>
+    <!-- Карточка с данными -->
+    <div class="result-card" id="dataCard" {% if not order_data %}style="display: none;"{% endif %}>
+        <h2>Проверьте данные:</h2>
+        <div class="field-row">
+            <span class="field-icon">📄</span>
+            <span class="field-label">Заказ №</span>
+            <input type="text" id="orderNumber" class="field-value" value="{{ order_data.order_number if order_data else '' }}" onfocus="this.blur()">
         </div>
-        <div class="result-data" id="resultData" style="display: none;">
-            <h2>Проверьте данные:</h2>
-            <div class="field-row">
-                <span class="field-icon">📄</span>
-                <span class="field-label">Заказ №</span>
-                <input type="text" id="orderNumber" class="field-value" onfocus="this.blur()">
-            </div>
-            <div class="field-row">
-                <span class="field-icon">🏭</span>
-                <span class="field-label">Подразделение</span>
-                <input type="text" id="department" class="field-value" onfocus="this.blur()">
-            </div>
-            <div class="field-row">
-                <span class="field-icon">⚙️</span>
-                <span class="field-label">Изделие</span>
-                <input type="text" id="productName" class="field-value" onfocus="this.blur()">
-            </div>
-            <p class="confirm-question" style="margin-top: 16px; font-weight: 600;">Данные на фото совпадают?</p>
-            <div class="action-buttons" style="display: flex; gap: 10px; margin-top: 12px;">
-                <button class="btn-primary" id="confirmYes" style="flex:1;">Да, всё верно. Продолжить →</button>
-                <button class="btn-secondary" id="confirmNo" style="flex:1;">Нет, внести вручную</button>
-            </div>
+        <div class="field-row">
+            <span class="field-icon">🏭</span>
+            <span class="field-label">Подразделение</span>
+            <input type="text" id="department" class="field-value" value="{{ order_data.department if order_data else '' }}" onfocus="this.blur()">
         </div>
+        <div class="field-row">
+            <span class="field-icon">⚙️</span>
+            <span class="field-label">Изделие</span>
+            <input type="text" id="productName" class="field-value" value="{{ order_data.product_name if order_data else '' }}" onfocus="this.blur()">
+        </div>
+
+        <p class="confirm-question" style="margin-top: 16px; font-weight: 600;">Данные на фото совпадают?</p>
+        <div class="action-buttons" style="display: flex; gap: 10px; margin-top: 12px;">
+            <button class="btn-primary" id="confirmYes" style="flex:1;">Да, всё верно. Продолжить →</button>
+            <button class="btn-secondary" id="confirmNo" style="flex:1;">Нет, внести вручную</button>
+        </div>
+    </div>
+
+    <!-- Анимация сканирования (скрыта) -->
+    <div class="scanning-animation" id="scanAnimation" style="display: none; text-align: center; padding: 20px;">
+        <div class="scan-line"></div>
+        <p>Идет распознавание…</p>
     </div>
 </div>
 {% endblock %}
@@ -56,13 +96,17 @@
 <script>
     const cameraInput = document.getElementById('cameraInput');
     const galleryInput = document.getElementById('galleryInput');
-    const captureBtn = document.getElementById('captureBtn');
-    const resultCard = document.getElementById('resultCard');
+    const dataCard = document.getElementById('dataCard');
     const scanAnimation = document.getElementById('scanAnimation');
-    const resultData = document.getElementById('resultData');
-    let currentOrderId = null;
+    let currentOrderId = {{ order_id | tojson }} || null;
+    let hasData = {{ 'true' if order_data else 'false' }};
 
-    captureBtn.addEventListener('click', () => cameraInput.click());
+    {% if not order_data %}
+    const captureBtn = document.getElementById('captureBtn');
+    if (captureBtn) {
+        captureBtn.addEventListener('click', () => cameraInput.click());
+    }
+    {% endif %}
 
     [cameraInput, galleryInput].forEach(input => {
         input.addEventListener('change', () => {
@@ -71,13 +115,18 @@
 
             const reader = new FileReader();
             reader.onload = (e) => {
-                document.getElementById('previewArea').innerHTML = `<img src="${e.target.result}" alt="Фото">`;
+                const previewArea = document.getElementById('previewArea');
+                if (previewArea) {
+                    previewArea.innerHTML = `<img src="${e.target.result}" alt="Фото">`;
+                } else {
+                    const photoPreview = document.querySelector('.photo-preview img');
+                    if (photoPreview) photoPreview.src = e.target.result;
+                }
             };
             reader.readAsDataURL(file);
 
-            resultCard.style.display = 'block';
+            dataCard.style.display = 'none';
             scanAnimation.style.display = 'block';
-            resultData.style.display = 'none';
 
             const formData = new FormData();
             formData.append('file', file);
@@ -86,7 +135,9 @@
                 .then(res => res.json())
                 .then(data => {
                     scanAnimation.style.display = 'none';
-                    resultData.style.display = 'block';
+                    dataCard.style.display = 'block';
+                    hasData = true;
+                    
                     document.getElementById('orderNumber').value = data.order_number;
                     document.getElementById('department').value = data.department;
                     document.getElementById('productName').value = data.product_name;
@@ -101,7 +152,7 @@
         const product = document.getElementById('productName').value;
         const department = document.getElementById('department').value;
 
-        if (order === 'НЕ НАЙДЕНО' || product === 'НЕ НАЙДЕНО') {
+        if (!order || !product || order === 'НЕ НАЙДЕНО' || product === 'НЕ НАЙДЕНО') {
             alert('⚠️ Заполните все поля!');
             return;
         }
