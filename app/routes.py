@@ -50,19 +50,44 @@ def scan_page(request: Request):
     
     order_data = None
     saved_photo = None
+    completed_steps = []
+    
     if order_id:
         conn = get_db()
         cursor = conn.cursor()
         cursor.execute("SELECT * FROM orders WHERE id = ?", (int(order_id),))
         row = cursor.fetchone()
         order_data = dict(row) if row else None
+        
+        if order_data:
+            completed_steps.append("order")
+            saved_photo = get_saved_file_path(int(order_id), "order")
+            
+        # Проверяем ГЧ
+        if order_data:
+            cursor.execute("SELECT id FROM gch_data WHERE order_id = ?", (int(order_id),))
+            if cursor.fetchone():
+                completed_steps.append("gch")
+        # Проверяем Г3
+        if order_data:
+            cursor.execute("SELECT id FROM g3_data WHERE order_id = ?", (int(order_id),))
+            if cursor.fetchone():
+                completed_steps.append("g3")
+        # Проверяем ПГ3
+        if order_data:
+            cursor.execute("SELECT id FROM pg3_data WHERE order_id = ?", (int(order_id),))
+            if cursor.fetchone():
+                completed_steps.append("pg3")
+        if order_data:
+            cursor.execute("SELECT id FROM pg3_data WHERE order_id = ?", (int(order_id),))
+            if cursor.fetchone():
+                completed_steps.append("visual")                 
         conn.close()
-        saved_photo = get_saved_file_path(int(order_id), "order")
 
     return templates.TemplateResponse("scan.html", {
         "request": request,
         "current_step": "order",
-        "completed_steps": [],
+        "completed_steps": completed_steps,
         "order_id": order_id,
         "order_data": order_data,
         "saved_photo": saved_photo,
@@ -161,24 +186,42 @@ def check_gch_page(request: Request):
     gch_data = None
     order_data = None
     saved_photo = None
+    completed_steps = ["order"]
+    
     if order_id:
         conn = get_db()
         cursor = conn.cursor()
         cursor.execute("SELECT * FROM orders WHERE id = ?", (int(order_id),))
         row = cursor.fetchone()
         order_data = dict(row) if row else None
+        
         cursor.execute("SELECT * FROM gch_data WHERE order_id = ?", (int(order_id),))
         row = cursor.fetchone()
         gch_data = dict(row) if row else None
+        
+        if gch_data:
+            completed_steps.append("gch")
+            saved_photo = get_saved_file_path(int(order_id), "gch")
+            
+        cursor.execute("SELECT id FROM g3_data WHERE order_id = ?", (int(order_id),))
+        if cursor.fetchone():
+            completed_steps.append("g3")
+            
+        cursor.execute("SELECT id FROM pg3_data WHERE order_id = ?", (int(order_id),))
+        if cursor.fetchone():
+            completed_steps.append("pg3")
+
+        cursor.execute("SELECT id FROM pg3_data WHERE order_id = ?", (int(order_id),))
+        if cursor.fetchone():
+            completed_steps.append("visual")            
         conn.close()
-        saved_photo = get_saved_file_path(int(order_id), "gch")
 
     import json
     
     return templates.TemplateResponse("check_gch.html", {
         "request": request,
         "current_step": "gch",
-        "completed_steps": ["order"],
+        "completed_steps": completed_steps,
         "order_id": order_id,
         "order_data": order_data,
         "gch_data": gch_data,
@@ -272,24 +315,42 @@ def check_g3_page(request: Request):
     g3_data = None
     order_data = None
     saved_photo = None
+    completed_steps = ["order", "gch"]
+    
     if order_id:
         conn = get_db()
         cursor = conn.cursor()
         cursor.execute("SELECT * FROM orders WHERE id = ?", (int(order_id),))
         row = cursor.fetchone()
         order_data = dict(row) if row else None
+        
+        # Проверяем ГЧ (должен быть пройден)
+        cursor.execute("SELECT id FROM gch_data WHERE order_id = ?", (int(order_id),))
+        if not cursor.fetchone():
+            completed_steps.remove("gch")
+        
         cursor.execute("SELECT * FROM g3_data WHERE order_id = ?", (int(order_id),))
         row = cursor.fetchone()
         g3_data = dict(row) if row else None
+       
+        if g3_data:
+            completed_steps.append("g3")
+            saved_photo = get_saved_file_path(int(order_id), "g3")
+            
+        cursor.execute("SELECT id FROM pg3_data WHERE order_id = ?", (int(order_id),))
+        if cursor.fetchone():
+            completed_steps.append("pg3")
+        cursor.execute("SELECT id FROM pg3_data WHERE order_id = ?", (int(order_id),))
+        if cursor.fetchone():
+            completed_steps.append("visual")             
         conn.close()
-        saved_photo = get_saved_file_path(int(order_id), "g3")
 
     import json
     
     return templates.TemplateResponse("check_g3.html", {
         "request": request,
         "current_step": "g3",
-        "completed_steps": ["order", "gch"],
+        "completed_steps": completed_steps,
         "order_id": order_id,
         "order_data": order_data,
         "g3_data": g3_data,
@@ -341,7 +402,13 @@ async def api_scan_g3(request: Request, file: UploadFile = File(...)):
     if order_id_str:
         from app.database import save_g3
         save_g3(int(order_id_str), g3_number, params)
-        save_uploaded_file(int(order_id_str), "g3", file)
+        # Сохраняем файл (переоткрываем для чтения)
+        with open(file_path, "rb") as f:
+            order_dir = os.path.join("app/static/uploads", f"order_{int(order_id_str)}")
+            os.makedirs(order_dir, exist_ok=True)
+            dest_path = os.path.join(order_dir, "g3.jpeg")
+            with open(dest_path, "wb") as dest:
+                shutil.copyfileobj(f, dest)
 
     return JSONResponse(content={
         "status": "ok", "g3_number": g3_number, "found_product": found_product,
@@ -369,24 +436,41 @@ def check_pg3_page(request: Request):
     pg3_data = None
     order_data = None
     saved_photo = None
+    completed_steps = ["order", "gch", "g3"]
+    
     if order_id:
         conn = get_db()
         cursor = conn.cursor()
         cursor.execute("SELECT * FROM orders WHERE id = ?", (int(order_id),))
         row = cursor.fetchone()
         order_data = dict(row) if row else None
+        
+        # Проверяем что предыдущие шаги пройдены
+        cursor.execute("SELECT id FROM gch_data WHERE order_id = ?", (int(order_id),))
+        if not cursor.fetchone():
+            completed_steps = [s for s in completed_steps if s != "gch"]
+        cursor.execute("SELECT id FROM g3_data WHERE order_id = ?", (int(order_id),))
+        if not cursor.fetchone():
+            completed_steps = [s for s in completed_steps if s != "g3"]
+        
         cursor.execute("SELECT * FROM pg3_data WHERE order_id = ?", (int(order_id),))
         row = cursor.fetchone()
         pg3_data = dict(row) if row else None
+        cursor.execute("SELECT id FROM pg3_data WHERE order_id = ?", (int(order_id),))
+        if cursor.fetchone():
+            completed_steps.append("visual")        
+        if pg3_data:
+            completed_steps.append("pg3")
+            saved_photo = get_saved_file_path(int(order_id), "pg3")
+            
         conn.close()
-        saved_photo = get_saved_file_path(int(order_id), "pg3")
 
     import json
     
     return templates.TemplateResponse("check_pg3.html", {
         "request": request,
         "current_step": "pg3",
-        "completed_steps": ["order", "gch", "g3"],
+        "completed_steps": completed_steps,
         "order_id": order_id,
         "order_data": order_data,
         "pg3_data": pg3_data,
@@ -438,7 +522,12 @@ async def api_scan_pg3(request: Request, file: UploadFile = File(...)):
     if order_id_str:
         from app.database import save_pg3
         save_pg3(int(order_id_str), pg3_number, items)
-        save_uploaded_file(int(order_id_str), "pg3", file)
+        with open(file_path, "rb") as f:
+            order_dir = os.path.join("app/static/uploads", f"order_{int(order_id_str)}")
+            os.makedirs(order_dir, exist_ok=True)
+            dest_path = os.path.join(order_dir, "pg3.jpeg")
+            with open(dest_path, "wb") as dest:
+                shutil.copyfileobj(f, dest)
 
     return JSONResponse(content={
         "status": "ok", "pg3_number": pg3_number, "found_product": found_product,
@@ -465,6 +554,7 @@ def visual_check_page(request: Request):
     
     gch_data = None
     order_data = None
+    completed_steps = ["order", "gch", "g3", "pg3"]
     
     if order_id:
         conn = get_db()
@@ -478,6 +568,21 @@ def visual_check_page(request: Request):
         row = cursor.fetchone()
         gch_data = dict(row) if row else None
         
+        # Проверяем реально пройденные шаги
+        if not gch_data:
+            completed_steps = [s for s in completed_steps if s != "gch"]
+        cursor.execute("SELECT id FROM g3_data WHERE order_id = ?", (int(order_id),))
+        if not cursor.fetchone():
+            completed_steps = [s for s in completed_steps if s != "g3"]
+        cursor.execute("SELECT id FROM pg3_data WHERE order_id = ?", (int(order_id),))
+        if not cursor.fetchone():
+            completed_steps = [s for s in completed_steps if s != "pg3"]
+            
+        # Визуальный контроль доступен если есть ПГ3
+        cursor.execute("SELECT id FROM pg3_data WHERE order_id = ?", (int(order_id),))
+        if cursor.fetchone():
+            completed_steps.append("visual")
+        
         conn.close()
 
     import json
@@ -485,7 +590,7 @@ def visual_check_page(request: Request):
     return templates.TemplateResponse("visual_check.html", {
         "request": request,
         "current_step": "visual",
-        "completed_steps": ["order", "gch", "g3", "pg3"],
+        "completed_steps": completed_steps,
         "order_id": order_id,
         "order": order_data,
         "gch": gch_data,
