@@ -192,9 +192,23 @@
 </head>
 <body>
     <!-- Прогресс-бар -->
-    {% set step_order = ["order", "gch", "g3", "pg3", "visual"] %}
-    {% set step_names = {"order": "📷 Заказ", "gch": "📐 ГЧ", "g3": "🔧 Г3", "pg3": "📋 ПГ3", "visual": "🔍 Контроль"} %}
-    {% set step_urls = {"order": "/", "gch": "/check-gch", "g3": "/check-g3", "pg3": "/check-pg3", "visual": "/visual-check"} %}
+    {% set step_order = ["order", "gch", "g3", "pg3", "visual", "measurements"] %}
+    {% set step_names = {
+        "order": "📷 Заказ", 
+        "gch": "📐 ГЧ", 
+        "g3": "🔧 Г3", 
+        "pg3": "📋 ПГ3", 
+        "visual": "🔍 Контроль",
+        "measurements": "⚡ Измерения"
+    } %}
+    {% set step_urls = {
+        "order": "/", 
+        "gch": "/check-gch", 
+        "g3": "/check-g3", 
+        "pg3": "/check-pg3", 
+        "visual": "/visual-check",
+        "measurements": "/measurements"
+    } %}
     
     {% if current_step %}
     <div class="progress-bar">
