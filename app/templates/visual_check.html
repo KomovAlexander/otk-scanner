@@ -62,6 +62,128 @@
         resize: vertical;
         min-height: 50px;
     }
+    .check-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 10px;
+    }
+    .check-row select {
+        padding: 8px 12px;
+        background: #2a2d35;
+        border: 1px solid #3a3d45;
+        border-radius: 6px;
+        color: #fff;
+        font-size: 14px;
+    }
+    .items-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 10px;
+    }
+    .items-table th, .items-table td {
+        padding: 8px 6px;
+        text-align: left;
+        font-size: 13px;
+        border-bottom: 1px solid #2a2d35;
+    }
+    .items-table th { color: #ff6b35; }
+    .items-table input[type="text"] {
+        width: 100%;
+        padding: 6px 8px;
+        background: #2a2d35;
+        border: 1px solid #3a3d45;
+        border-radius: 6px;
+        color: #fff;
+        font-size: 13px;
+    }
+    .items-table input.pos-input { width: 50px; text-align: center; }
+    .items-table input.qty-input { width: 50px; text-align: center; }
+    .items-table .cross-mark {
+        color: #f44336;
+        font-size: 18px;
+        font-weight: 700;
+        text-align: center;
+        display: none;
+    }
+
+    /* Раскрывающиеся секции */
+    .section-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        cursor: pointer;
+        padding: 12px 0;
+        border-bottom: 1px solid #2a2d35;
+        margin-bottom: 12px;
+    }
+    .section-header h3 {
+        margin: 0;
+        font-size: 16px;
+        color: #ff6b35;
+    }
+    .section-header .toggle-icon {
+        font-size: 14px;
+        color: #888;
+        transition: transform 0.3s;
+    }
+    .section-content {
+        display: block;
+    }
+    .section-content.collapsed {
+        display: none;
+    }
+    .toggle-icon.rotated {
+        transform: rotate(-90deg);
+    }
+    .items-table input[type="checkbox"] {
+        width: 22px;
+        height: 22px;
+        accent-color: #4caf50;
+        cursor: pointer;
+    }
+    .items-table .checkbox-cell {
+        position: relative;
+        width: 30px;
+        text-align: center;
+    }
+    .items-table .cross-mark {
+        color: #f44336;
+        font-size: 22px;
+        font-weight: 700;
+        display: none;
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+    }
+    @media (max-width: 480px) {
+        .size-row {
+            flex-wrap: wrap;
+        }
+        .size-row .etalon {
+            min-width: 100%;
+            margin-bottom: 4px;
+        }
+        .size-row input {
+            flex: 1;
+            min-width: 0;
+        }
+        .size-row .comment-box {
+            width: 100%;
+            margin-top: 4px;
+        }
+        .check-row {
+            flex-direction: column;
+            align-items: flex-start;
+        }
+        .check-row select {
+            width: 100%;
+        }
+        .check-row .comment-box {
+            width: 100%;
+        }
+    }    
 </style>
 {% endblock %}
 
@@ -69,7 +191,7 @@
 <div class="page-container">
     <div class="page-header">
         <h1>🔍 Визуальный контроль</h1>
-        <p>Сверьте изделие с чертежом ГЧ и введите фактические значения</p>
+        <p>Сверьте изделие с чертежами и введите фактические значения</p>
     </div>
 
     <div class="info-row">
@@ -77,49 +199,177 @@
         <div><span>Заказ №:</span> {{ order.order_number if order else '—' }}</div>
     </div>
 
-    <div class="section-title">📐 Соответствие чертежу</div>
-    <div class="form-group">
-        <label>Изделие соответствует ГЧ?</label>
-        <select id="matchGCH">
-            <option value="">— Выберите —</option>
-            <option value="yes">✅ Да, соответствует</option>
-            <option value="no">❌ Нет, есть отклонения</option>
-        </select>
-        <div class="comment-box" id="gchCommentBox">
-            <textarea placeholder="Опишите отклонения..."></textarea>
+    <!-- ═══════════ РАЗДЕЛ 1: ГЧ ═══════════ -->
+    <div class="section-header" onclick="toggleSection('gchSection')">
+        <h3>📐 Соответствие чертежу (ГЧ)</h3>
+        <span class="toggle-icon rotated" id="gchIcon">▼</span>
+    </div>
+    <div class="section-content collapsed" id="gchSection">
+        <div class="form-group">
+            <label>Изделие соответствует ГЧ?</label>
+            <select id="matchGCH" class="check-select">
+                <option value="">— Выберите —</option>
+                <option value="yes">✅ Да, соответствует</option>
+                <option value="no">❌ Нет, есть отклонения</option>
+            </select>
+            <div class="comment-box" id="gchCommentBox">
+                <textarea placeholder="Опишите отклонения..."></textarea>
+            </div>
+        </div>
+
+        <div class="section-title">📏 Габаритные размеры (эталон из ГЧ)</div>
+        {% if gch_sizes %}
+        {% for size in gch_sizes %}
+        <div class="size-row">
+            <span class="etalon">Эталон: {{ size }} мм</span>
+            <input type="number" class="size-input" data-etalon="{{ size }}"
+                   placeholder="Введите фактический размер" min="1" step="1" oninput="checkSize(this)">
+            <div class="comment-box">
+                <textarea placeholder="Причина отклонения..."></textarea>
+            </div>
+        </div>
+        {% endfor %}
+        {% else %}
+        <p style="color:#888;">Габариты не загружены</p>
+        {% endif %}
+
+        <div class="section-title">🎨 Цвет покрытия (эталон из ГЧ: {{ gch_ral }})</div>
+        <div class="form-group">
+            <input type="text" id="ralInput" value="" placeholder="Введите RAL"
+                   data-etalon="{{ gch_ral }}" oninput="checkRAL()">
+            <div class="comment-box" id="ralCommentBox">
+                <textarea placeholder="Причина несоответствия RAL..."></textarea>
+            </div>
+        </div>
+
+        <div class="section-title">⚖️ Масса</div>
+        <div class="form-group">
+            <input type="number" id="massInput" placeholder="Введите массу (кг)" step="0.1" min="0.1">
         </div>
     </div>
 
-    <div class="section-title">📏 Габаритные размеры (эталон из ГЧ)</div>
-    {% if gch_sizes %}
-    {% for size in gch_sizes %}
-    <div class="size-row">
-        <span class="etalon">Эталон: {{ size }} мм</span>
-        <input type="number" class="size-input" data-etalon="{{ size }}"
-               placeholder="Введите фактический размер" min="1" step="1" oninput="checkSize(this)">
-        <div class="comment-box">
-            <textarea placeholder="Причина отклонения..."></textarea>
+    <!-- ═══════════ РАЗДЕЛ 2: Г3 ═══════════ -->
+    <div class="section-header" onclick="toggleSection('g3Section')">
+        <h3>⚙️ Проверка сборки (Г3)</h3>
+        <span class="toggle-icon rotated" id="g3Icon">▼</span>
+    </div>
+    <div class="section-content collapsed" id="g3Section">
+        {% if g3_params %}
+        <div class="form-group">
+            <label>Соответствие гидравлической схеме?</label>
+            <select class="check-select" data-name="Гидравлическая схема">
+                <option value="">— Выберите —</option>
+                <option value="yes">✅ Да, соответствует</option>
+                <option value="no">❌ Нет, есть отклонения</option>
+            </select>
+            <div class="comment-box">
+                <textarea placeholder="Опишите отклонения..."></textarea>
+            </div>
         </div>
-    </div>
-    {% endfor %}
-    {% else %}
-    <p style="color:#888;">Габариты не загружены</p>
-    {% endif %}
 
-    <div class="section-title">🎨 Цвет покрытия (эталон из ГЧ: {{ gch_ral }})</div>
-    <div class="form-group">
-        <input type="text" id="ralInput" value="" placeholder="Введите RAL"
-               data-etalon="{{ gch_ral }}" oninput="checkRAL()">
-        <div class="comment-box" id="ralCommentBox">
-            <textarea placeholder="Причина несоответствия RAL..."></textarea>
+        <div class="form-group">
+            <label>Размеры выходов станции?</label>
+            <select class="check-select" data-name="Размеры выходов">
+                <option value="">— Выберите —</option>
+                <option value="yes">✅ Да, соответствует</option>
+                <option value="no">❌ Нет, есть отклонения</option>
+            </select>
+            <div class="comment-box">
+                <textarea placeholder="Опишите отклонения..."></textarea>
+            </div>
         </div>
+
+        {% for p in g3_params %}
+            {% if p.type == "motor_voltage" %}
+            <div class="form-group">
+                <label>Напряжение двигателя (эталон: {{ p.value }} {{ p.unit }})</label>
+                <input type="text" class="g3-input" data-etalon="{{ p.value }}"
+                       data-name="Напряжение двигателя" data-unit="{{ p.unit }}"
+                       placeholder="Введите значение" oninput="checkG3Value(this)">
+                <div class="comment-box">
+                    <textarea placeholder="Причина отклонения..."></textarea>
+                </div>
+            </div>
+            {% elif p.type == "motor_power" %}
+            <div class="form-group">
+                <label>Мощность двигателя (эталон: {{ p.value }} {{ p.unit }})</label>
+                <input type="text" class="g3-input" data-etalon="{{ p.value }}"
+                       data-name="Мощность двигателя" data-unit="{{ p.unit }}"
+                       placeholder="Введите значение" oninput="checkG3Value(this)">
+                <div class="comment-box">
+                    <textarea placeholder="Причина отклонения..."></textarea>
+                </div>
+            </div>
+            {% elif p.type == "motor_rpm" %}
+            <div class="form-group">
+                <label>Частота вращения (эталон: {{ p.value }} {{ p.unit }})</label>
+                <input type="text" class="g3-input" data-etalon="{{ p.value }}"
+                       data-name="Частота вращения" data-unit="{{ p.unit }}"
+                       placeholder="Введите значение" oninput="checkG3Value(this)">
+                <div class="comment-box">
+                    <textarea placeholder="Причина отклонения..."></textarea>
+                </div>
+            </div>
+            {% elif p.type == "coil_voltage" %}
+            <div class="form-group">
+                <label>Напряжение катушек (эталон: {{ p.value }} {{ p.unit }})</label>
+                <input type="text" class="g3-input" data-etalon="{{ p.value }}"
+                       data-name="Напряжение катушек" data-unit="{{ p.unit }}"
+                       placeholder="Введите значение" oninput="checkG3Value(this)">
+                <div class="comment-box">
+                    <textarea placeholder="Причина отклонения..."></textarea>
+                </div>
+            </div>
+            {% endif %}
+        {% endfor %}
+        {% else %}
+        <p style="color:#888;">Параметры Г3 не загружены</p>
+        {% endif %}
     </div>
 
-    <div class="section-title">⚖️ Масса</div>
-    <div class="form-group">
-        <input type="number" id="massInput" placeholder="Введите массу (кг)" step="0.1" min="0.1">
+    <!-- ═══════════ РАЗДЕЛ 3: ПГ3 ═══════════ -->
+    <div class="section-header" onclick="toggleSection('pg3Section')">
+        <h3>📦 Проверка комплектации (ПГ3)</h3>
+        <span class="toggle-icon rotated" id="pg3Icon">▼</span>
+    </div>
+    <div class="section-content collapsed" id="pg3Section">
+        {% if pg3_items %}
+        <table class="items-table">
+            <thead>
+                <tr><th>Поз.</th><th>Наименование</th><th>Факт</th><th>Соотв.</th></tr>
+            </thead>
+            <tbody>
+                {% for item in pg3_items %}
+                <tr data-position="{{ item.position }}">
+                    <td>{{ item.position }}</td>
+                    <td>
+                        <input type="text" class="pg3-name" value="{{ item.name }}"
+                               data-original="{{ item.name }}"
+                               oninput="checkPg3Name(this)">
+                    </td>
+                    <td>
+                        <input type="text" class="pg3-qty qty-input" value="{{ item.quantity }}" 
+                               data-position="{{ item.position }}" data-expected="{{ item.quantity }}"
+                               oninput="checkPg3Qty(this)">
+                    </td>
+                    <td class="checkbox-cell" style="text-align:center;">
+                        <input type="checkbox" class="pg3-checkbox" data-position="{{ item.position }}" 
+                               onchange="togglePg3Row(this)">
+                        <span class="cross-mark">✕</span>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        <div class="comment-box" id="pg3CommentBox" style="margin-top:10px;">
+            <textarea placeholder="Замечания по комплектации..."></textarea>
+        </div>
+        {% else %}
+        <p style="color:#888;">Перечень ПГ3 не загружен</p>
+        {% endif %}
     </div>
 
+    <!-- ═══════════ НЕСООТВЕТСТВИЯ ═══════════ -->
     <div id="deviationsBlock" class="deviation-list">
         <h3>⚠️ Несоответствия для согласования с Конструктором</h3>
         <div id="deviationsList"></div>
@@ -132,28 +382,34 @@
 {% block extra_js %}
 <script>
     let deviations = [];
+    checkAllFields();
+    // Раскрытие/скрытие секций
+    function toggleSection(sectionId) {
+        const content = document.getElementById(sectionId);
+        const icon = document.getElementById(sectionId.replace('Section', 'Icon'));
+        content.classList.toggle('collapsed');
+        icon.classList.toggle('rotated');
+    }
 
     function checkSize(input) {
         const etalon = input.dataset.etalon;
         const value = input.value.trim();
         const commentBox = input.parentElement.querySelector('.comment-box');
         if (!value || parseInt(value) <= 0) {
-            input.classList.add('match-fail');
-            input.classList.remove('match-ok');
+            input.classList.add('match-fail'); input.classList.remove('match-ok');
             if (commentBox) commentBox.style.display = 'block';
-            updateDeviations();
-            return;
+            updateDeviations(); return;
         }
         if (value === etalon) {
-            input.classList.add('match-ok');
-            input.classList.remove('match-fail');
+            input.classList.add('match-ok'); input.classList.remove('match-fail');
             if (commentBox) commentBox.style.display = 'none';
         } else {
-            input.classList.add('match-fail');
-            input.classList.remove('match-ok');
+            input.classList.add('match-fail'); input.classList.remove('match-ok');
             if (commentBox) commentBox.style.display = 'block';
         }
         updateDeviations();
+        checkAllFields();        
+        autoSave();
     }
 
     function checkRAL() {
@@ -163,40 +419,283 @@
         if (!etalon || !input.value.trim()) {
             input.classList.remove('match-ok', 'match-fail');
             commentBox.style.display = 'none';
-            updateDeviations();
-            return;
+            updateDeviations(); return;
         }
         if (input.value.trim() === etalon) {
-            input.classList.add('match-ok');
-            input.classList.remove('match-fail');
+            input.classList.add('match-ok'); input.classList.remove('match-fail');
             commentBox.style.display = 'none';
         } else {
-            input.classList.add('match-fail');
-            input.classList.remove('match-ok');
+            input.classList.add('match-fail'); input.classList.remove('match-ok');
             commentBox.style.display = 'block';
         }
         updateDeviations();
+        checkAllFields();
+        autoSave();
     }
+
+    function checkG3Value(input) {
+        const etalon = input.dataset.etalon;
+        const value = input.value.trim();
+        const commentBox = input.parentElement.querySelector('.comment-box');
+        if (!value) {
+            input.classList.remove('match-ok', 'match-fail');
+            if (commentBox) commentBox.style.display = 'none';
+            updateDeviations(); return;
+        }
+        if (value === etalon || value.includes(etalon)) {
+            input.classList.add('match-ok'); input.classList.remove('match-fail');
+            if (commentBox) commentBox.style.display = 'none';
+        } else {
+            input.classList.add('match-fail'); input.classList.remove('match-ok');
+            if (commentBox) commentBox.style.display = 'block';
+        }
+        updateDeviations();
+        checkAllFields();        
+        autoSave();
+    }
+
+    function updateRowStatus(row) {
+        const checkbox = row.querySelector('.pg3-checkbox');
+        const crossMark = row.querySelector('.cross-mark');
+        const nameInput = row.querySelector('.pg3-name');
+        const qtyInput = row.querySelector('.pg3-qty');
+        
+        const nameChanged = nameInput.value.trim() !== nameInput.dataset.original;
+        const qtyChanged = qtyInput.value.trim() !== qtyInput.dataset.expected;
+        const hasChanges = nameChanged || qtyChanged;
+        
+        // Крест только если реально что-то изменено
+        if (hasChanges) {
+            crossMark.style.display = 'inline';
+            checkbox.style.display = 'none';
+        } else {
+            crossMark.style.display = 'none';
+            checkbox.style.display = 'inline';
+        }
+        
+        // Подсветка полей
+        if (nameChanged) {
+            nameInput.classList.add('match-fail');
+            nameInput.classList.remove('match-ok');
+        } else if (checkbox.checked) {
+            nameInput.classList.add('match-ok');
+            nameInput.classList.remove('match-fail');
+        } else {
+            nameInput.classList.remove('match-ok', 'match-fail');
+        }
+        
+        if (qtyChanged) {
+            qtyInput.classList.add('match-fail');
+            qtyInput.classList.remove('match-ok');
+        } else if (checkbox.checked) {
+            qtyInput.classList.add('match-ok');
+            qtyInput.classList.remove('match-fail');
+        } else {
+            qtyInput.classList.remove('match-ok', 'match-fail');
+        }
+    }
+
+    function togglePg3Row(checkbox) {
+        const row = checkbox.closest('tr');
+        updateRowStatus(row);
+        updateDeviations();
+        checkAllFields();        
+        autoSave();
+    }
+
+    function checkPg3Name(input) {
+        const original = input.dataset.original;
+        const value = input.value.trim();
+        if (!value || value === original) {
+            input.classList.remove('match-fail');
+            input.classList.add('match-ok');
+        } else {
+            input.classList.add('match-fail');
+            input.classList.remove('match-ok');
+        }
+        const row = input.closest('tr');
+        updateRowStatus(row);
+        updateDeviations();
+        checkAllFields();        
+        autoSave();
+    }
+
+    function checkPg3Qty(input) {
+        const expected = input.dataset.expected;
+        const value = input.value.trim();
+        if (!value || value === expected) {
+            input.classList.remove('match-fail');
+            input.classList.add('match-ok');
+        } else {
+            input.classList.add('match-fail');
+            input.classList.remove('match-ok');
+        }
+        const row = input.closest('tr');
+        updateRowStatus(row);
+        updateDeviations();
+        checkAllFields();        
+        autoSave();
+    }
+    // Восстановление данных из localStorage при загрузке
+    (function restoreData() {
+        const params = new URLSearchParams(window.location.search);
+        const orderId = params.get('order_id');
+        if (!orderId) return;
+
+        const saved = localStorage.getItem(`visual_check_${orderId}`);
+        if (!saved) return;
+
+        try {
+            const data = JSON.parse(saved);
+            
+            // ГЧ
+            if (data.gch_match) {
+                document.getElementById('matchGCH').value = data.gch_match;
+                document.getElementById('matchGCH').dispatchEvent(new Event('change'));
+            }
+            if (data.sizes) {
+                document.querySelectorAll('.size-input').forEach((input, i) => {
+                    if (data.sizes[i]) input.value = data.sizes[i];
+                    input.dispatchEvent(new Event('input'));
+                });
+            }
+            if (data.ral) {
+                document.getElementById('ralInput').value = data.ral;
+                document.getElementById('ralInput').dispatchEvent(new Event('input'));
+            }
+            if (data.mass) {
+                document.getElementById('massInput').value = data.mass;
+                document.getElementById('massInput').dispatchEvent(new Event('input'));
+            }
+            
+            // Г3
+            if (data.g3_checks) {
+                document.querySelectorAll('.check-select').forEach((select, i) => {
+                    if (data.g3_checks[i]) {
+                        select.value = data.g3_checks[i].value;
+                        select.dispatchEvent(new Event('change'));
+                    }
+                });
+            }
+            if (data.g3_values) {
+                document.querySelectorAll('.g3-input').forEach((input, i) => {
+                    if (data.g3_values[i]) {
+                        input.value = data.g3_values[i].value;
+                        input.dispatchEvent(new Event('input'));
+                    }
+                });
+            }
+            
+            // ПГ3
+            if (data.pg3_items) {
+                document.querySelectorAll('.pg3-checkbox').forEach((cb, i) => {
+                    if (data.pg3_items[i]) {
+                        cb.checked = data.pg3_items[i].confirmed;
+                        const row = cb.closest('tr');
+                        const nameInput = row.querySelector('.pg3-name');
+                        const qtyInput = row.querySelector('.pg3-qty');
+                        if (data.pg3_items[i].name) nameInput.value = data.pg3_items[i].name;
+                        if (data.pg3_items[i].qty) qtyInput.value = data.pg3_items[i].qty;
+                        nameInput.dispatchEvent(new Event('input'));
+                        qtyInput.dispatchEvent(new Event('input'));
+                        updateRowStatus(row);
+                    }
+                });
+            }
+        } catch (e) {
+            console.error('Ошибка восстановления данных:', e);
+        }
+    })();
 
     function updateDeviations() {
         deviations = [];
+
+        // ГЧ
         const gch = document.getElementById('matchGCH');
-        if (gch && gch.value === 'no') {
+        if (gch && !gch.value) {
+            deviations.push(`📐 Соответствие ГЧ: не указано`);
+        } else if (gch && gch.value === 'no') {
             const comment = document.getElementById('gchCommentBox').querySelector('textarea')?.value || '';
             deviations.push(`📐 Изделие НЕ соответствует ГЧ${comment ? ' — ' + comment : ''}`);
         }
-        document.querySelectorAll('.size-input.match-fail').forEach(input => {
+        
+        document.querySelectorAll('.size-input').forEach((input, i) => {
             const etalon = input.dataset.etalon;
             const value = input.value.trim();
             const comment = input.parentElement.querySelector('textarea')?.value || '';
-            deviations.push(`📏 Габарит: ожидается ${etalon} мм, введено ${value} мм${comment ? ' — ' + comment : ''}`);
+            if (!value) {
+                deviations.push(`📏 Габарит ${i+1}: не заполнено (эталон: ${etalon} мм)`);
+            } else if (input.classList.contains('match-fail')) {
+                deviations.push(`📏 Габарит ${i+1}: ожидается ${etalon} мм, введено ${value} мм${comment ? ' — ' + comment : ''}`);
+            }
         });
+        
         const ralInput = document.getElementById('ralInput');
-        if (ralInput && ralInput.classList.contains('match-fail')) {
+        if (ralInput && !ralInput.value.trim()) {
+            deviations.push(`🎨 RAL: не указан (эталон: ${ralInput.dataset.etalon})`);
+        } else if (ralInput && ralInput.classList.contains('match-fail')) {
             const etalon = ralInput.dataset.etalon;
             const comment = document.getElementById('ralCommentBox').querySelector('textarea')?.value || '';
             deviations.push(`🎨 RAL: ожидается ${etalon}, введено ${ralInput.value}${comment ? ' — ' + comment : ''}`);
         }
+        
+        const massInput = document.getElementById('massInput');
+        if (massInput && !massInput.value) {
+            deviations.push(`⚖️ Масса: не указана`);
+        }
+
+        // Г3
+        document.querySelectorAll('.check-select').forEach(select => {
+            if (!select.value) {
+                const name = select.dataset.name;
+                deviations.push(`⚙️ ${name}: не указано`);
+            } else if (select.value === 'no') {
+                const name = select.dataset.name;
+                const comment = select.parentElement.querySelector('textarea')?.value || '';
+                deviations.push(`⚙️ ${name}: не соответствует${comment ? ' — ' + comment : ''}`);
+            }
+        });
+        
+        document.querySelectorAll('.g3-input').forEach(input => {
+            const name = input.dataset.name;
+            const etalon = input.dataset.etalon;
+            const unit = input.dataset.unit || '';
+            const value = input.value.trim();
+            const comment = input.parentElement.querySelector('textarea')?.value || '';
+            if (!value) {
+                deviations.push(`⚙️ ${name}: не заполнено (эталон: ${etalon} ${unit})`);
+            } else if (input.classList.contains('match-fail')) {
+                deviations.push(`⚙️ ${name}: ожидается ${etalon} ${unit}, введено ${value} ${unit}${comment ? ' — ' + comment : ''}`);
+            }
+        });
+
+        // ПГ3
+        document.querySelectorAll('.pg3-checkbox').forEach(cb => {
+            const pos = cb.dataset.position;
+            const row = cb.closest('tr');
+            const name = row.querySelector('.pg3-name').value.trim();
+            const originalName = row.querySelector('.pg3-name').dataset.original;
+            const expected = row.querySelector('.pg3-qty').dataset.expected;
+            const actual = row.querySelector('.pg3-qty').value.trim();
+            const nameChanged = name !== originalName;
+            const qtyChanged = actual !== expected;
+            
+            if (!cb.checked && !nameChanged && !qtyChanged) {
+                deviations.push(`📦 Поз. ${pos}: ${name} — не подтверждено`);
+            } else if (nameChanged || qtyChanged) {
+                let msg = `📦 Поз. ${pos}: `;
+                if (nameChanged) {
+                    msg += `${originalName} → ${name}`;
+                } else {
+                    msg += name;
+                }
+                if (qtyChanged) {
+                    msg += ` — ${actual} шт. (ожидается ${expected})`;
+                }
+                deviations.push(msg);
+            }
+        });
+
         const block = document.getElementById('deviationsBlock');
         const list = document.getElementById('deviationsList');
         if (deviations.length > 0) {
@@ -207,37 +706,123 @@
         }
     }
 
+    // Автосохранение в localStorage
+    async function autoSave() {
+        const params = new URLSearchParams(window.location.search);
+        const orderId = params.get('order_id');
+        if (!orderId) return;
+
+        const data = {
+            order_id: parseInt(orderId),
+            gch_match: document.getElementById('matchGCH')?.value || '',
+            sizes: Array.from(document.querySelectorAll('.size-input')).map(input => input.value.trim()),
+            ral: document.getElementById('ralInput')?.value || '',
+            mass: document.getElementById('massInput')?.value || '',
+            g3_checks: Array.from(document.querySelectorAll('.check-select')).map(select => ({
+                name: select.dataset.name,
+                value: select.value,
+                comment: select.parentElement.querySelector('textarea')?.value || ''
+            })),
+            g3_values: Array.from(document.querySelectorAll('.g3-input')).map(input => ({
+                name: input.dataset.name,
+                value: input.value.trim(),
+                comment: input.parentElement.querySelector('textarea')?.value || ''
+            })),
+            pg3_items: Array.from(document.querySelectorAll('.pg3-checkbox')).map(cb => {
+                const row = cb.closest('tr');
+                return {
+                    position: cb.dataset.position,
+                    confirmed: cb.checked,
+                    name: row.querySelector('.pg3-name').value.trim(),
+                    qty: row.querySelector('.pg3-qty').value.trim()
+                };
+            }),
+            deviations: deviations
+        };
+
+        localStorage.setItem(`visual_check_${orderId}`, JSON.stringify(data));
+    }
+
+    function checkAllFields() {
+        let allFilled = true;
+        
+        // ГЧ
+        const gch = document.getElementById('matchGCH');
+        if (gch && !gch.value) allFilled = false;
+        
+        document.querySelectorAll('.size-input').forEach(input => {
+            if (!input.value.trim() || parseInt(input.value) <= 0) allFilled = false;
+        });
+        
+        const ralInput = document.getElementById('ralInput');
+        if (ralInput && !ralInput.value.trim()) allFilled = false;
+        
+        const massInput = document.getElementById('massInput');
+        if (massInput && (!massInput.value || parseFloat(massInput.value) <= 0)) allFilled = false;
+        
+        // Г3
+        document.querySelectorAll('.check-select').forEach(select => {
+            if (!select.value) allFilled = false;
+        });
+        
+        document.querySelectorAll('.g3-input').forEach(input => {
+            if (!input.value.trim()) allFilled = false;
+        });
+        
+        // ПГ3 — либо подтверждено, либо есть изменения
+        document.querySelectorAll('.pg3-checkbox').forEach(cb => {
+            const row = cb.closest('tr');
+            const nameInput = row.querySelector('.pg3-name');
+            const qtyInput = row.querySelector('.pg3-qty');
+            const nameChanged = nameInput.value.trim() !== nameInput.dataset.original;
+            const qtyChanged = qtyInput.value.trim() !== qtyInput.dataset.expected;
+            
+            if (!cb.checked && !nameChanged && !qtyChanged) {
+                allFilled = false; // Не подтверждено и не изменено — ошибка
+            }
+        });
+        
+        return allFilled;
+    }
+
     function goNext() {
+        if (!checkAllFields()) {
+            alert('⚠️ Заполните все обязательные поля перед переходом к испытаниям!');
+            return;
+        }
         const params = new URLSearchParams(window.location.search);
         window.location.href = '/checklist?' + params.toString();
     }
 
+    // Обработчики
     document.getElementById('matchGCH').addEventListener('change', function() {
-        const box = document.getElementById('gchCommentBox');
-        box.style.display = this.value === 'no' ? 'block' : 'none';
-        if (this.value === 'no') {
-            this.classList.add('match-fail');
-            this.classList.remove('match-ok');
-        } else if (this.value === 'yes') {
-            this.classList.add('match-ok');
-            this.classList.remove('match-fail');
-        } else {
-            this.classList.remove('match-ok', 'match-fail');
-        }
+        document.getElementById('gchCommentBox').style.display = this.value === 'no' ? 'block' : 'none';
+        if (this.value === 'no') { this.classList.add('match-fail'); this.classList.remove('match-ok'); }
+        else if (this.value === 'yes') { this.classList.add('match-ok'); this.classList.remove('match-fail'); }
+        else { this.classList.remove('match-ok', 'match-fail'); }
         updateDeviations();
+        autoSave();
     });
 
     document.getElementById('massInput').addEventListener('input', function() {
-        if (this.value && parseFloat(this.value) <= 0) {
-            this.value = '';
-            alert('⚠️ Масса должна быть больше 0!');
-        }
-        if (this.value && parseFloat(this.value) > 0) {
-            this.classList.add('match-ok');
-            this.classList.remove('match-fail');
-        } else {
-            this.classList.remove('match-ok', 'match-fail');
-        }
+        if (this.value && parseFloat(this.value) <= 0) { this.value = ''; alert('⚠️ Масса должна быть больше 0!'); }
+        if (this.value && parseFloat(this.value) > 0) { this.classList.add('match-ok'); this.classList.remove('match-fail'); }
+        else { this.classList.remove('match-ok', 'match-fail'); }
+        autoSave();
     });
+
+    document.querySelectorAll('.check-select').forEach(select => {
+        select.addEventListener('change', function() {
+            const commentBox = this.parentElement.querySelector('.comment-box');
+            if (commentBox) commentBox.style.display = this.value === 'no' ? 'block' : 'none';
+            if (this.value === 'no') { this.classList.add('match-fail'); this.classList.remove('match-ok'); }
+            else if (this.value === 'yes') { this.classList.add('match-ok'); this.classList.remove('match-fail'); }
+            else { this.classList.remove('match-ok', 'match-fail'); }
+            updateDeviations();
+            autoSave();
+        });
+    });
+
+    updateDeviations();
 </script>
 {% endblock %}

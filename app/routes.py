@@ -553,6 +553,8 @@ def visual_check_page(request: Request):
     order_id = request.query_params.get("order_id", None)
     
     gch_data = None
+    g3_data = None
+    pg3_data = None
     order_data = None
     completed_steps = ["order", "gch", "g3", "pg3"]
     
@@ -568,19 +570,24 @@ def visual_check_page(request: Request):
         row = cursor.fetchone()
         gch_data = dict(row) if row else None
         
+        cursor.execute("SELECT * FROM g3_data WHERE order_id = ?", (int(order_id),))
+        row = cursor.fetchone()
+        g3_data = dict(row) if row else None
+        
+        cursor.execute("SELECT * FROM pg3_data WHERE order_id = ?", (int(order_id),))
+        row = cursor.fetchone()
+        pg3_data = dict(row) if row else None
+        
         # Проверяем реально пройденные шаги
         if not gch_data:
             completed_steps = [s for s in completed_steps if s != "gch"]
-        cursor.execute("SELECT id FROM g3_data WHERE order_id = ?", (int(order_id),))
-        if not cursor.fetchone():
+        if not g3_data:
             completed_steps = [s for s in completed_steps if s != "g3"]
-        cursor.execute("SELECT id FROM pg3_data WHERE order_id = ?", (int(order_id),))
-        if not cursor.fetchone():
+        if not pg3_data:
             completed_steps = [s for s in completed_steps if s != "pg3"]
-            
+        
         # Визуальный контроль доступен если есть ПГ3
-        cursor.execute("SELECT id FROM pg3_data WHERE order_id = ?", (int(order_id),))
-        if cursor.fetchone():
+        if pg3_data:
             completed_steps.append("visual")
         
         conn.close()
@@ -596,4 +603,6 @@ def visual_check_page(request: Request):
         "gch": gch_data,
         "gch_sizes": json.loads(gch_data.get("sizes", "[]")) if gch_data else [],
         "gch_ral": gch_data.get("ral", "") if gch_data else "",
+        "g3_params": json.loads(g3_data.get("params", "[]")) if g3_data else [],
+        "pg3_items": json.loads(pg3_data.get("items", "[]")) if pg3_data else [],
     })
