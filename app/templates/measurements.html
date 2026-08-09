@@ -26,6 +26,24 @@
         color: #fff;
         font-size: 15px;
     }
+    .form-group select {
+        width: 100%;
+        padding: 10px 12px;
+        background: #2a2d35;
+        border: 1px solid #3a3d45;
+        border-radius: 8px;
+        color: #fff;
+        font-size: 15px;
+    }
+    #fluidCustom {
+        width: 100%;
+        padding: 10px 12px;
+        background: #2a2d35;
+        border: 1px solid #3a3d45;
+        border-radius: 8px;
+        color: #fff;
+        font-size: 15px;
+    }
     .form-row {
         display: flex;
         gap: 12px;
@@ -55,24 +73,6 @@
         resize: vertical;
         min-height: 50px;
     }
-    .form-group select {
-        width: 100%;
-        padding: 10px 12px;
-        background: #2a2d35;
-        border: 1px solid #3a3d45;
-        border-radius: 8px;
-        color: #fff;
-        font-size: 15px;
-    }
-    #fluidCustom {
-        width: 100%;
-        padding: 10px 12px;
-        background: #2a2d35;
-        border: 1px solid #3a3d45;
-        border-radius: 8px;
-        color: #fff;
-        font-size: 15px;
-    }        
 </style>
 {% endblock %}
 
@@ -91,7 +91,7 @@
     <!-- Давление клапанов -->
     {% if g3_params %}
         {% for p in g3_params if p.type == "valve_setting" %}
-        <div class="section-title">🔧 {{ p.name }} (эталон: {{ p.value }} {{ p.unit }})</div>
+                <div class="section-title">🔧 {{ p.name }} (эталон: {{ p.value }} {{ p.unit }}{% if p.tolerance %}, допуск: {{ p.tolerance }}{% endif %})</div>
         <div class="form-group">
             <label>Фактическое значение</label>
             <input type="text" class="g3-input" data-etalon="{{ p.value }}"
@@ -108,7 +108,7 @@
     <!-- Давление насосов -->
     {% if g3_params %}
         {% for p in g3_params if p.type == "pump_pressure" %}
-        <div class="section-title">🔧 {{ p.name }} (эталон: {{ p.value }} {{ p.unit }})</div>
+                <div class="section-title">🔧 {{ p.name }} (эталон: {{ p.value }} {{ p.unit }}{% if p.tolerance %}, допуск: {{ p.tolerance }}{% endif %})</div>
         <div class="form-group">
             <label>Фактическое значение</label>
             <input type="text" class="g3-input" data-etalon="{{ p.value }}"
@@ -126,7 +126,7 @@
     <div class="section-title">🔌 Ток по фазам</div>
     <div class="form-group">
         <label>Номинальный ток (А)</label>
-        <input type="text" id="nominalCurrent" placeholder="Введите номинальный ток">
+        <input type="text" id="nominalCurrent" placeholder="Введите номинальный ток" oninput="autoSave()">
     </div>
     <div class="form-row">
         <div class="form-group">
@@ -162,11 +162,11 @@
     <div class="form-row">
         <div class="form-group">
             <label>Холостой ход (дБ)</label>
-            <input type="text" id="noiseIdle" placeholder="Введите уровень шума">
+            <input type="text" id="noiseIdle" placeholder="Введите уровень шума" oninput="autoSave()">
         </div>
         <div class="form-group">
             <label>Под нагрузкой (дБ)</label>
-            <input type="text" id="noiseLoad" placeholder="Введите уровень шума">
+            <input type="text" id="noiseLoad" placeholder="Введите уровень шума" oninput="autoSave()">
         </div>
     </div>
 
@@ -215,6 +215,7 @@
 {% block extra_js %}
 <script>
     let deviations = [];
+    let isRestoring = false;
 
     function checkValue(input) {
         const etalon = parseFloat(input.dataset.etalon.replace(',', '.'));
@@ -225,72 +226,54 @@
         if (isNaN(value)) {
             input.classList.remove('match-ok', 'match-fail');
             if (commentBox) commentBox.style.display = 'none';
-            updateDeviations();
-            checkAllFields();
-            return;
+            updateDeviations(); checkAllFields(); return;
         }
         
-        // Извлекаем допуск: ±10, +10, -10
-        let upperTolerance = 0;
-        let lowerTolerance = 0;
-        
+        let upperTolerance = 0, lowerTolerance = 0;
         const symmetricMatch = toleranceStr.match(/[±]\s*(\d+)/);
         const upperMatch = toleranceStr.match(/^\+\s*(\d+)/);
         const lowerMatch = toleranceStr.match(/^-\s*(\d+)/);
         
         if (symmetricMatch) {
-            // ±10 — симметричный
             const tol = parseFloat(symmetricMatch[1]);
-            upperTolerance = tol;
-            lowerTolerance = tol;
+            upperTolerance = tol; lowerTolerance = tol;
         } else if (upperMatch) {
-            // +10 — только верхняя граница
-            upperTolerance = parseFloat(upperMatch[1]);
-            lowerTolerance = 0;
+            upperTolerance = parseFloat(upperMatch[1]); lowerTolerance = 0;
         } else if (lowerMatch) {
-            // -10 — только нижняя граница
-            upperTolerance = 0;
-            lowerTolerance = parseFloat(lowerMatch[1]);
+            upperTolerance = 0; lowerTolerance = parseFloat(lowerMatch[1]);
         } else {
-            // Нет допуска — ±5% от эталона
             const tol = Math.round(etalon * 0.05);
-            upperTolerance = tol;
-            lowerTolerance = tol;
+            upperTolerance = tol; lowerTolerance = tol;
         }
         
         const ok = (value >= etalon - lowerTolerance) && (value <= etalon + upperTolerance);
         
         if (ok) {
-            input.classList.add('match-ok');
-            input.classList.remove('match-fail');
-            if (commentBox) commentBox.style.display = 'none';
-        } else {
-            input.classList.add('match-fail');
-            input.classList.remove('match-ok');
-            if (commentBox) commentBox.style.display = 'block';
-        }
-        updateDeviations();
-        checkAllFields();
-    }
-
-    function checkMaxValue(input) {
-        const etalon = input.dataset.etalon;
-        const value = input.value.trim().replace(',', '.');
-        const commentBox = input.parentElement.querySelector('.comment-box');
-        if (!value) {
-            input.classList.remove('match-ok', 'match-fail');
-            if (commentBox) commentBox.style.display = 'none';
-            updateDeviations(); return;
-        }
-        if (parseFloat(value) <= parseFloat(etalon)) {
             input.classList.add('match-ok'); input.classList.remove('match-fail');
             if (commentBox) commentBox.style.display = 'none';
         } else {
             input.classList.add('match-fail'); input.classList.remove('match-ok');
             if (commentBox) commentBox.style.display = 'block';
         }
-        updateDeviations();
-        checkAllFields();
+        updateDeviations(); checkAllFields(); autoSave();
+    }
+
+    function checkMaxTemp(input) {
+        const value = input.value.trim().replace(',', '.');
+        const commentBox = document.getElementById('tempCommentBox');
+        if (!value) {
+            input.classList.remove('match-ok', 'match-fail');
+            if (commentBox) commentBox.style.display = 'none';
+            updateDeviations(); checkAllFields(); return;
+        }
+        if (parseFloat(value) <= 70) {
+            input.classList.add('match-ok'); input.classList.remove('match-fail');
+            if (commentBox) commentBox.style.display = 'none';
+        } else {
+            input.classList.add('match-fail'); input.classList.remove('match-ok');
+            if (commentBox) commentBox.style.display = 'block';
+        }
+        updateDeviations(); checkAllFields(); autoSave();
     }
 
     function checkCurrent(input) {
@@ -307,8 +290,32 @@
         } else {
             input.classList.add('match-fail'); input.classList.remove('match-ok');
         }
-        updateDeviations();
-        checkAllFields();
+        updateDeviations(); checkAllFields(); autoSave();
+    }
+
+    function checkFluid(select) {
+        const custom = document.getElementById('fluidCustom');
+        const commentBox = document.getElementById('fluidCommentBox');
+        if (select.value === 'другое') {
+            custom.style.display = 'block';
+            select.classList.remove('match-ok', 'match-fail');
+            if (commentBox) commentBox.style.display = 'block';
+        } else if (select.value) {
+            custom.style.display = 'none';
+            select.classList.add('match-ok'); select.classList.remove('match-fail');
+            if (commentBox) commentBox.style.display = 'none';
+        } else {
+            custom.style.display = 'none';
+            select.classList.remove('match-ok', 'match-fail');
+        }
+        updateDeviations(); checkAllFields(); autoSave();
+    }
+
+    function checkFluidCustom(input) {
+        const value = input.value.trim();
+        if (value) { input.classList.add('match-ok'); input.classList.remove('match-fail'); }
+        else { input.classList.remove('match-ok', 'match-fail'); }
+        updateDeviations(); checkAllFields(); autoSave();
     }
 
     function updateDeviations() {
@@ -331,21 +338,18 @@
             const percent = nom > 0 ? ((val - nom) / nom * 100).toFixed(1) : 0;
             deviations.push(`🔌 Ток фаза ${phase} (${mode}): ${value} А превышает номинал ${nominal} А на ${percent}%`);
         });
-        // Температура
         const tempInput = document.getElementById('tempInput');
         if (tempInput && tempInput.classList.contains('match-fail')) {
             const value = tempInput.value.trim();
             const comment = document.getElementById('tempCommentBox')?.querySelector('textarea')?.value || '';
             deviations.push(`🌡️ Температура РЖ: ${value}°C превышает 70°C${comment ? ' — ' + comment : ''}`);
         }
-        
-        // Масло
         const fluidSelect = document.getElementById('fluidSelect');
         const fluidCustom = document.getElementById('fluidCustom');
         if (fluidSelect && fluidSelect.value === 'другое' && fluidCustom && fluidCustom.value.trim()) {
             const etalon = fluidSelect.dataset.etalon;
             deviations.push(`🛢️ Масло: ожидается ${etalon}, замена на ${fluidCustom.value.trim()}`);
-        }        
+        }
         const block = document.getElementById('deviationsBlock');
         const list = document.getElementById('deviationsList');
         if (deviations.length > 0) {
@@ -359,26 +363,14 @@
     function checkAllFields() {
         let allFilled = true;
         const btnNext = document.getElementById('btnNext');
-        
-        document.querySelectorAll('.g3-input').forEach(input => {
-            if (!input.value.trim()) allFilled = false;
-        });
-        document.querySelectorAll('.current-input').forEach(input => {
-            if (!input.value.trim()) allFilled = false;
-        });
-        
-        // Температура
+        document.querySelectorAll('.g3-input').forEach(input => { if (!input.value.trim()) allFilled = false; });
+        document.querySelectorAll('.current-input').forEach(input => { if (!input.value.trim()) allFilled = false; });
         const tempInput = document.getElementById('tempInput');
         if (tempInput && !tempInput.value.trim()) allFilled = false;
-        
-        // Масло
         const fluidSelect = document.getElementById('fluidSelect');
         const fluidCustom = document.getElementById('fluidCustom');
-        if (fluidSelect && !fluidSelect.value) {
-            allFilled = false;
-        } else if (fluidSelect && fluidSelect.value === 'другое' && (!fluidCustom || !fluidCustom.value.trim())) {
-            allFilled = false;
-        }
+        if (fluidSelect && !fluidSelect.value) allFilled = false;
+        else if (fluidSelect && fluidSelect.value === 'другое' && (!fluidCustom || !fluidCustom.value.trim())) allFilled = false;
         
         if (!allFilled) {
             btnNext.disabled = true;
@@ -392,6 +384,42 @@
         return allFilled;
     }
 
+    async function autoSave() {
+        if (isRestoring) return;
+        const params = new URLSearchParams(window.location.search);
+        const orderId = params.get('order_id');
+        if (!orderId) return;
+
+        const data = {
+            order_id: parseInt(orderId),
+            g3_values: Array.from(document.querySelectorAll('.g3-input')).map(input => ({
+                name: input.dataset.name,
+                etalon: input.dataset.etalon,
+                unit: input.dataset.unit || '',
+                value: input.value.trim(),
+                comment: input.parentElement.querySelector('textarea')?.value || ''
+            })),
+            currents: Array.from(document.querySelectorAll('.current-input')).map(input => ({
+                phase: input.dataset.phase,
+                mode: input.dataset.mode,
+                value: input.value.trim()
+            })),
+            nominal_current: document.getElementById('nominalCurrent')?.value || '',
+            noise_idle: document.getElementById('noiseIdle')?.value || '',
+            noise_load: document.getElementById('noiseLoad')?.value || '',
+            temp: document.getElementById('tempInput')?.value || '',
+            fluid: document.getElementById('fluidSelect')?.value || '',
+            fluid_custom: document.getElementById('fluidCustom')?.value || '',
+            deviations: deviations
+        };
+
+        fetch('/api/save-measurements', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        }).catch(err => console.error('Ошибка сохранения:', err));
+    }
+
     function finishTests() {
         if (!checkAllFields()) {
             alert('⚠️ Заполните все измерения!');
@@ -399,63 +427,56 @@
         }
         alert('✅ Испытания завершены! Протокол готов.');
     }
-    function checkMaxTemp(input) {
-        const value = input.value.trim().replace(',', '.');
-        const commentBox = document.getElementById('tempCommentBox');
-        if (!value) {
-            input.classList.remove('match-ok', 'match-fail');
-            if (commentBox) commentBox.style.display = 'none';
-            updateDeviations();
-            checkAllFields();
-            return;
-        }
-        if (parseFloat(value) <= 70) {
-            input.classList.add('match-ok');
-            input.classList.remove('match-fail');
-            if (commentBox) commentBox.style.display = 'none';
-        } else {
-            input.classList.add('match-fail');
-            input.classList.remove('match-ok');
-            if (commentBox) commentBox.style.display = 'block';
-        }
-        updateDeviations();
-        checkAllFields();
-    }
 
-    function checkFluid(select) {
-        const custom = document.getElementById('fluidCustom');
-        const commentBox = document.getElementById('fluidCommentBox');
+    // Загрузка сохранённых данных из БД
+    (async function loadSavedData() {
+        const params = new URLSearchParams(window.location.search);
+        const orderId = params.get('order_id');
+        if (!orderId) return;
+
+        try {
+            const res = await fetch(`/api/get-measurements?order_id=${orderId}`);
+            const data = await res.json();
+            if (data.status !== 'ok' || !data.data) return;
+
+            const saved = data.data;
+            
+            isRestoring = true;
+            
+            if (saved.g3_values) {
+                document.querySelectorAll('.g3-input').forEach((input, i) => {
+                    if (saved.g3_values[i] && saved.g3_values[i].value) {
+                        input.value = saved.g3_values[i].value;
+                        input.dispatchEvent(new Event('input'));
+                    }
+                });
+            }
+            if (saved.currents) {
+                document.querySelectorAll('.current-input').forEach((input, i) => {
+                    if (saved.currents[i] && saved.currents[i].value) {
+                        input.value = saved.currents[i].value;
+                        input.dispatchEvent(new Event('input'));
+                    }
+                });
+            }
+            if (saved.nominal_current) document.getElementById('nominalCurrent').value = saved.nominal_current;
+            if (saved.noise_idle) document.getElementById('noiseIdle').value = saved.noise_idle;
+            if (saved.noise_load) document.getElementById('noiseLoad').value = saved.noise_load;
+            if (saved.temp) { document.getElementById('tempInput').value = saved.temp; document.getElementById('tempInput').dispatchEvent(new Event('input')); }
+            if (saved.fluid) {
+                document.getElementById('fluidSelect').value = saved.fluid;
+                document.getElementById('fluidSelect').dispatchEvent(new Event('change'));
+            }
+            if (saved.fluid_custom) document.getElementById('fluidCustom').value = saved.fluid_custom;
+            
+            isRestoring = false;
+        } catch (e) {
+            console.error('Ошибка загрузки:', e);
+            isRestoring = false;
+        }
         
-        if (select.value === 'другое') {
-            custom.style.display = 'block';
-            select.classList.remove('match-ok', 'match-fail');
-            if (commentBox) commentBox.style.display = 'block';
-        } else if (select.value) {
-            custom.style.display = 'none';
-            select.classList.add('match-ok');
-            select.classList.remove('match-fail');
-            if (commentBox) commentBox.style.display = 'none';
-        } else {
-            custom.style.display = 'none';
-            select.classList.remove('match-ok', 'match-fail');
-            if (commentBox) commentBox.style.display = 'none';
-        }
         updateDeviations();
         checkAllFields();
-    }
-
-    function checkFluidCustom(input) {
-        const value = input.value.trim();
-        if (value) {
-            input.classList.add('match-ok');
-            input.classList.remove('match-fail');
-        } else {
-            input.classList.remove('match-ok', 'match-fail');
-        }
-        updateDeviations();
-        checkAllFields();
-    }
-    updateDeviations();
-    checkAllFields();
+    })();
 </script>
 {% endblock %}

@@ -99,15 +99,28 @@
     }
     .items-table input.pos-input { width: 50px; text-align: center; }
     .items-table input.qty-input { width: 50px; text-align: center; }
+    .items-table .checkbox-cell {
+        position: relative;
+        width: 30px;
+        text-align: center;
+    }
+    .items-table input[type="checkbox"] {
+        width: 22px;
+        height: 22px;
+        accent-color: #4caf50;
+        cursor: pointer;
+    }
     .items-table .cross-mark {
         color: #f44336;
-        font-size: 18px;
+        font-size: 22px;
         font-weight: 700;
-        text-align: center;
         display: none;
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
     }
 
-    /* Раскрывающиеся секции */
     .section-header {
         display: flex;
         align-items: center;
@@ -127,63 +140,19 @@
         color: #888;
         transition: transform 0.3s;
     }
-    .section-content {
-        display: block;
-    }
-    .section-content.collapsed {
-        display: none;
-    }
-    .toggle-icon.rotated {
-        transform: rotate(-90deg);
-    }
-    .items-table input[type="checkbox"] {
-        width: 22px;
-        height: 22px;
-        accent-color: #4caf50;
-        cursor: pointer;
-    }
-    .items-table .checkbox-cell {
-        position: relative;
-        width: 30px;
-        text-align: center;
-    }
-    .items-table .cross-mark {
-        color: #f44336;
-        font-size: 22px;
-        font-weight: 700;
-        display: none;
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-    }
+    .section-content { display: block; }
+    .section-content.collapsed { display: none; }
+    .toggle-icon.rotated { transform: rotate(-90deg); }
+
     @media (max-width: 480px) {
-        .size-row {
-            flex-wrap: wrap;
-        }
-        .size-row .etalon {
-            min-width: 100%;
-            margin-bottom: 4px;
-        }
-        .size-row input {
-            flex: 1;
-            min-width: 0;
-        }
-        .size-row .comment-box {
-            width: 100%;
-            margin-top: 4px;
-        }
-        .check-row {
-            flex-direction: column;
-            align-items: flex-start;
-        }
-        .check-row select {
-            width: 100%;
-        }
-        .check-row .comment-box {
-            width: 100%;
-        }
-    }    
+        .size-row { flex-wrap: wrap; }
+        .size-row .etalon { min-width: 100%; margin-bottom: 4px; }
+        .size-row input { flex: 1; min-width: 0; }
+        .size-row .comment-box { width: 100%; margin-top: 4px; }
+        .check-row { flex-direction: column; align-items: flex-start; }
+        .check-row select { width: 100%; }
+        .check-row .comment-box { width: 100%; }
+    }
 </style>
 {% endblock %}
 
@@ -375,15 +344,15 @@
         <div id="deviationsList"></div>
     </div>
 
-    <button class="btn-next" onclick="goNext()">✅ Далее — к испытаниям</button>
+    <button class="btn-next" id="btnNext" onclick="goNext()">✅ Далее — к испытаниям</button>
 </div>
 {% endblock %}
 
 {% block extra_js %}
 <script>
     let deviations = [];
-    checkAllFields();
-    // Раскрытие/скрытие секций
+    let pg3Changed = false;
+    let isRestoring = false;
     function toggleSection(sectionId) {
         const content = document.getElementById(sectionId);
         const icon = document.getElementById(sectionId.replace('Section', 'Icon'));
@@ -398,7 +367,7 @@
         if (!value || parseInt(value) <= 0) {
             input.classList.add('match-fail'); input.classList.remove('match-ok');
             if (commentBox) commentBox.style.display = 'block';
-            updateDeviations(); return;
+            updateDeviations(); checkAllFields(); return;
         }
         if (value === etalon) {
             input.classList.add('match-ok'); input.classList.remove('match-fail');
@@ -408,7 +377,7 @@
             if (commentBox) commentBox.style.display = 'block';
         }
         updateDeviations();
-        checkAllFields();        
+        checkAllFields();
         autoSave();
     }
 
@@ -419,7 +388,7 @@
         if (!etalon || !input.value.trim()) {
             input.classList.remove('match-ok', 'match-fail');
             commentBox.style.display = 'none';
-            updateDeviations(); return;
+            updateDeviations(); checkAllFields(); return;
         }
         if (input.value.trim() === etalon) {
             input.classList.add('match-ok'); input.classList.remove('match-fail');
@@ -440,7 +409,7 @@
         if (!value) {
             input.classList.remove('match-ok', 'match-fail');
             if (commentBox) commentBox.style.display = 'none';
-            updateDeviations(); return;
+            updateDeviations(); checkAllFields(); return;
         }
         if (value === etalon || value.includes(etalon)) {
             input.classList.add('match-ok'); input.classList.remove('match-fail');
@@ -450,7 +419,7 @@
             if (commentBox) commentBox.style.display = 'block';
         }
         updateDeviations();
-        checkAllFields();        
+        checkAllFields();
         autoSave();
     }
 
@@ -464,7 +433,6 @@
         const qtyChanged = qtyInput.value.trim() !== qtyInput.dataset.expected;
         const hasChanges = nameChanged || qtyChanged;
         
-        // Крест только если реально что-то изменено
         if (hasChanges) {
             crossMark.style.display = 'inline';
             checkbox.style.display = 'none';
@@ -473,144 +441,67 @@
             checkbox.style.display = 'inline';
         }
         
-        // Подсветка полей
         if (nameChanged) {
-            nameInput.classList.add('match-fail');
-            nameInput.classList.remove('match-ok');
+            nameInput.classList.add('match-fail'); nameInput.classList.remove('match-ok');
         } else if (checkbox.checked) {
-            nameInput.classList.add('match-ok');
-            nameInput.classList.remove('match-fail');
+            nameInput.classList.add('match-ok'); nameInput.classList.remove('match-fail');
         } else {
             nameInput.classList.remove('match-ok', 'match-fail');
         }
         
         if (qtyChanged) {
-            qtyInput.classList.add('match-fail');
-            qtyInput.classList.remove('match-ok');
+            qtyInput.classList.add('match-fail'); qtyInput.classList.remove('match-ok');
         } else if (checkbox.checked) {
-            qtyInput.classList.add('match-ok');
-            qtyInput.classList.remove('match-fail');
+            qtyInput.classList.add('match-ok'); qtyInput.classList.remove('match-fail');
         } else {
             qtyInput.classList.remove('match-ok', 'match-fail');
         }
     }
 
     function togglePg3Row(checkbox) {
+        pg3Changed = true;
         const row = checkbox.closest('tr');
         updateRowStatus(row);
         updateDeviations();
-        checkAllFields();        
+        checkAllFields();
         autoSave();
     }
 
     function checkPg3Name(input) {
+        pg3Changed = true;
         const original = input.dataset.original;
         const value = input.value.trim();
         if (!value || value === original) {
-            input.classList.remove('match-fail');
-            input.classList.add('match-ok');
+            input.classList.remove('match-fail'); input.classList.add('match-ok');
         } else {
-            input.classList.add('match-fail');
-            input.classList.remove('match-ok');
+            input.classList.add('match-fail'); input.classList.remove('match-ok');
         }
         const row = input.closest('tr');
         updateRowStatus(row);
         updateDeviations();
-        checkAllFields();        
+        checkAllFields();
         autoSave();
     }
 
     function checkPg3Qty(input) {
+        pg3Changed = true;
         const expected = input.dataset.expected;
         const value = input.value.trim();
         if (!value || value === expected) {
-            input.classList.remove('match-fail');
-            input.classList.add('match-ok');
+            input.classList.remove('match-fail'); input.classList.add('match-ok');
         } else {
-            input.classList.add('match-fail');
-            input.classList.remove('match-ok');
+            input.classList.add('match-fail'); input.classList.remove('match-ok');
         }
         const row = input.closest('tr');
         updateRowStatus(row);
         updateDeviations();
-        checkAllFields();        
+        checkAllFields();
         autoSave();
     }
-    // Восстановление данных из localStorage при загрузке
-    (function restoreData() {
-        const params = new URLSearchParams(window.location.search);
-        const orderId = params.get('order_id');
-        if (!orderId) return;
-
-        const saved = localStorage.getItem(`visual_check_${orderId}`);
-        if (!saved) return;
-
-        try {
-            const data = JSON.parse(saved);
-            
-            // ГЧ
-            if (data.gch_match) {
-                document.getElementById('matchGCH').value = data.gch_match;
-                document.getElementById('matchGCH').dispatchEvent(new Event('change'));
-            }
-            if (data.sizes) {
-                document.querySelectorAll('.size-input').forEach((input, i) => {
-                    if (data.sizes[i]) input.value = data.sizes[i];
-                    input.dispatchEvent(new Event('input'));
-                });
-            }
-            if (data.ral) {
-                document.getElementById('ralInput').value = data.ral;
-                document.getElementById('ralInput').dispatchEvent(new Event('input'));
-            }
-            if (data.mass) {
-                document.getElementById('massInput').value = data.mass;
-                document.getElementById('massInput').dispatchEvent(new Event('input'));
-            }
-            
-            // Г3
-            if (data.g3_checks) {
-                document.querySelectorAll('.check-select').forEach((select, i) => {
-                    if (data.g3_checks[i]) {
-                        select.value = data.g3_checks[i].value;
-                        select.dispatchEvent(new Event('change'));
-                    }
-                });
-            }
-            if (data.g3_values) {
-                document.querySelectorAll('.g3-input').forEach((input, i) => {
-                    if (data.g3_values[i]) {
-                        input.value = data.g3_values[i].value;
-                        input.dispatchEvent(new Event('input'));
-                    }
-                });
-            }
-            
-            // ПГ3
-            if (data.pg3_items) {
-                document.querySelectorAll('.pg3-checkbox').forEach((cb, i) => {
-                    if (data.pg3_items[i]) {
-                        cb.checked = data.pg3_items[i].confirmed;
-                        const row = cb.closest('tr');
-                        const nameInput = row.querySelector('.pg3-name');
-                        const qtyInput = row.querySelector('.pg3-qty');
-                        if (data.pg3_items[i].name) nameInput.value = data.pg3_items[i].name;
-                        if (data.pg3_items[i].qty) qtyInput.value = data.pg3_items[i].qty;
-                        nameInput.dispatchEvent(new Event('input'));
-                        qtyInput.dispatchEvent(new Event('input'));
-                        updateRowStatus(row);
-                    }
-                });
-            }
-        } catch (e) {
-            console.error('Ошибка восстановления данных:', e);
-        }
-    })();
 
     function updateDeviations() {
         deviations = [];
 
-        // ГЧ
         const gch = document.getElementById('matchGCH');
         if (gch && !gch.value) {
             deviations.push(`📐 Соответствие ГЧ: не указано`);
@@ -644,15 +535,12 @@
             deviations.push(`⚖️ Масса: не указана`);
         }
 
-        // Г3
         document.querySelectorAll('.check-select').forEach(select => {
             if (!select.value) {
-                const name = select.dataset.name;
-                deviations.push(`⚙️ ${name}: не указано`);
+                deviations.push(`⚙️ ${select.dataset.name}: не указано`);
             } else if (select.value === 'no') {
-                const name = select.dataset.name;
                 const comment = select.parentElement.querySelector('textarea')?.value || '';
-                deviations.push(`⚙️ ${name}: не соответствует${comment ? ' — ' + comment : ''}`);
+                deviations.push(`⚙️ ${select.dataset.name}: не соответствует${comment ? ' — ' + comment : ''}`);
             }
         });
         
@@ -669,7 +557,6 @@
             }
         });
 
-        // ПГ3
         document.querySelectorAll('.pg3-checkbox').forEach(cb => {
             const pos = cb.dataset.position;
             const row = cb.closest('tr');
@@ -684,14 +571,9 @@
                 deviations.push(`📦 Поз. ${pos}: ${name} — не подтверждено`);
             } else if (nameChanged || qtyChanged) {
                 let msg = `📦 Поз. ${pos}: `;
-                if (nameChanged) {
-                    msg += `${originalName} → ${name}`;
-                } else {
-                    msg += name;
-                }
-                if (qtyChanged) {
-                    msg += ` — ${actual} шт. (ожидается ${expected})`;
-                }
+                if (nameChanged) msg += `${originalName} → ${name}`;
+                else msg += name;
+                if (qtyChanged) msg += ` — ${actual} шт. (ожидается ${expected})`;
                 deviations.push(msg);
             }
         });
@@ -706,8 +588,8 @@
         }
     }
 
-    // Автосохранение в localStorage
     async function autoSave() {
+        if (isRestoring) return;
         const params = new URLSearchParams(window.location.search);
         const orderId = params.get('order_id');
         if (!orderId) return;
@@ -728,25 +610,24 @@
                 value: input.value.trim(),
                 comment: input.parentElement.querySelector('textarea')?.value || ''
             })),
-            pg3_items: Array.from(document.querySelectorAll('.pg3-checkbox')).map(cb => {
-                const row = cb.closest('tr');
-                return {
-                    position: cb.dataset.position,
-                    confirmed: cb.checked,
-                    name: row.querySelector('.pg3-name').value.trim(),
-                    qty: row.querySelector('.pg3-qty').value.trim()
-                };
-            }),
+            pg3_confirmed: pg3Changed ? Array.from(document.querySelectorAll('.pg3-checkbox')).map(cb => ({
+                position: cb.dataset.position,
+                confirmed: cb.checked
+            })) : undefined,
             deviations: deviations
         };
 
-        localStorage.setItem(`visual_check_${orderId}`, JSON.stringify(data));
+        fetch('/api/save-visual', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        }).catch(err => console.error('Ошибка сохранения:', err));
     }
 
     function checkAllFields() {
         let allFilled = true;
+        const btnNext = document.getElementById('btnNext');
         
-        // ГЧ
         const gch = document.getElementById('matchGCH');
         if (gch && !gch.value) allFilled = false;
         
@@ -760,7 +641,6 @@
         const massInput = document.getElementById('massInput');
         if (massInput && (!massInput.value || parseFloat(massInput.value) <= 0)) allFilled = false;
         
-        // Г3
         document.querySelectorAll('.check-select').forEach(select => {
             if (!select.value) allFilled = false;
         });
@@ -769,19 +649,24 @@
             if (!input.value.trim()) allFilled = false;
         });
         
-        // ПГ3 — либо подтверждено, либо есть изменения
         document.querySelectorAll('.pg3-checkbox').forEach(cb => {
             const row = cb.closest('tr');
             const nameInput = row.querySelector('.pg3-name');
             const qtyInput = row.querySelector('.pg3-qty');
             const nameChanged = nameInput.value.trim() !== nameInput.dataset.original;
             const qtyChanged = qtyInput.value.trim() !== qtyInput.dataset.expected;
-            
-            if (!cb.checked && !nameChanged && !qtyChanged) {
-                allFilled = false; // Не подтверждено и не изменено — ошибка
-            }
+            if (!cb.checked && !nameChanged && !qtyChanged) allFilled = false;
         });
         
+        if (!allFilled) {
+            btnNext.disabled = true;
+            btnNext.textContent = '🔒 Заполните все поля';
+            btnNext.style.background = '#555';
+        } else {
+            btnNext.disabled = false;
+            btnNext.textContent = '✅ Далее — к испытаниям';
+            btnNext.style.background = '#4caf50';
+        }
         return allFilled;
     }
 
@@ -790,17 +675,19 @@
             alert('⚠️ Заполните все обязательные поля перед переходом к испытаниям!');
             return;
         }
+        autoSave();
         const params = new URLSearchParams(window.location.search);
         window.location.href = '/measurements?' + params.toString();
     }
 
-    // Обработчики
+    // Обработчики событий
     document.getElementById('matchGCH').addEventListener('change', function() {
         document.getElementById('gchCommentBox').style.display = this.value === 'no' ? 'block' : 'none';
         if (this.value === 'no') { this.classList.add('match-fail'); this.classList.remove('match-ok'); }
         else if (this.value === 'yes') { this.classList.add('match-ok'); this.classList.remove('match-fail'); }
         else { this.classList.remove('match-ok', 'match-fail'); }
         updateDeviations();
+        checkAllFields();
         autoSave();
     });
 
@@ -808,6 +695,7 @@
         if (this.value && parseFloat(this.value) <= 0) { this.value = ''; alert('⚠️ Масса должна быть больше 0!'); }
         if (this.value && parseFloat(this.value) > 0) { this.classList.add('match-ok'); this.classList.remove('match-fail'); }
         else { this.classList.remove('match-ok', 'match-fail'); }
+        checkAllFields();
         autoSave();
     });
 
@@ -819,10 +707,80 @@
             else if (this.value === 'yes') { this.classList.add('match-ok'); this.classList.remove('match-fail'); }
             else { this.classList.remove('match-ok', 'match-fail'); }
             updateDeviations();
+            checkAllFields();
             autoSave();
         });
     });
 
-    updateDeviations();
+    // Загрузка сохранённых данных из БД
+    (async function loadSavedData() {
+        const params = new URLSearchParams(window.location.search);
+        const orderId = params.get('order_id');
+        if (!orderId) return;
+
+        try {
+            const res = await fetch(`/api/get-visual?order_id=${orderId}`);
+            const data = await res.json();
+            if (data.status !== 'ok' || !data.data) return;
+
+            const saved = data.data;
+            
+            isRestoring = true;
+            
+            if (saved.gch_match) {
+                document.getElementById('matchGCH').value = saved.gch_match;
+                document.getElementById('matchGCH').dispatchEvent(new Event('change'));
+            }
+            if (saved.sizes) {
+                document.querySelectorAll('.size-input').forEach((input, i) => {
+                    if (saved.sizes[i]) { input.value = saved.sizes[i]; input.dispatchEvent(new Event('input')); }
+                });
+            }
+            if (saved.ral) {
+                document.getElementById('ralInput').value = saved.ral;
+                document.getElementById('ralInput').dispatchEvent(new Event('input'));
+            }
+            if (saved.mass) {
+                document.getElementById('massInput').value = saved.mass;
+                document.getElementById('massInput').dispatchEvent(new Event('input'));
+            }
+            
+            if (saved.g3_checks) {
+                document.querySelectorAll('.check-select').forEach((select, i) => {
+                    if (saved.g3_checks[i] && saved.g3_checks[i].value) {
+                        select.value = saved.g3_checks[i].value;
+                        select.dispatchEvent(new Event('change'));
+                    }
+                });
+            }
+            if (saved.g3_values) {
+                document.querySelectorAll('.g3-input').forEach((input, i) => {
+                    if (saved.g3_values[i] && saved.g3_values[i].value) {
+                        input.value = saved.g3_values[i].value;
+                        input.dispatchEvent(new Event('input'));
+                    }
+                });
+            }
+            
+            if (saved.pg3_confirmed) {
+                document.querySelectorAll('.pg3-checkbox').forEach(cb => {
+                    const savedItem = saved.pg3_confirmed.find(item => item.position === cb.dataset.position);
+                    if (savedItem) {
+                        cb.checked = savedItem.confirmed;
+                        updateRowStatus(cb.closest('tr'));
+                    }
+                });
+            }
+            
+            isRestoring = false;
+        } catch (e) {
+            console.error('Ошибка загрузки:', e);
+            isRestoring = false;
+        }
+        
+        pg3Changed = false;
+        updateDeviations();
+        checkAllFields();
+    })();
 </script>
 {% endblock %}

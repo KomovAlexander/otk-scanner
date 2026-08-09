@@ -584,6 +584,29 @@ async def api_save_pg3(request: Request):
     return JSONResponse(content={"status": "error", "message": "Нет order_id"}, status_code=400)
 
 
+# ── Сохранение визуального контроля ──────────────────
+@router.post("/api/save-visual")
+async def api_save_visual(request: Request):
+    data = await request.json()
+    order_id = data.get("order_id")
+    if order_id:
+        from app.database import save_visual_results
+        save_visual_results(int(order_id), data)
+        return JSONResponse(content={"status": "ok"})
+    return JSONResponse(content={"status": "error", "message": "Нет order_id"}, status_code=400)
+
+
+# ── Сохранение измерений ────────────────────────────
+@router.post("/api/save-measurements")
+async def api_save_measurements(request: Request):
+    data = await request.json()
+    order_id = data.get("order_id")
+    if order_id:
+        from app.database import save_measurement_results
+        save_measurement_results(int(order_id), data)
+        return JSONResponse(content={"status": "ok"})
+    return JSONResponse(content={"status": "error", "message": "Нет order_id"}, status_code=400)
+
 # ── Страница визуального контроля ──────────────────
 @router.get("/visual-check")
 def visual_check_page(request: Request):
@@ -691,3 +714,24 @@ def measurements_page(request: Request):
         "order": order_data,
         "g3_params": json.loads(g3_data.get("params", "[]")) if g3_data else [],
     })
+
+
+# ── Загрузка визуального контроля ──────────────────
+@router.get("/api/get-visual")
+def api_get_visual(request: Request):
+    order_id = request.query_params.get("order_id", None)
+    if order_id:
+        from app.database import get_visual_results
+        data = get_visual_results(int(order_id))
+        return JSONResponse(content={"status": "ok", "data": data})
+    return JSONResponse(content={"status": "error", "message": "Нет order_id"}, status_code=400)
+
+# ── Загрузка измерений ──────────────────────────────
+@router.get("/api/get-measurements")
+def api_get_measurements(request: Request):
+    order_id = request.query_params.get("order_id", None)
+    if order_id:
+        from app.database import get_measurement_results
+        data = get_measurement_results(int(order_id))
+        return JSONResponse(content={"status": "ok", "data": data})
+    return JSONResponse(content={"status": "error", "message": "Нет order_id"}, status_code=400)

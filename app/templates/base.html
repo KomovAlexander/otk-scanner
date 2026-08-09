@@ -216,7 +216,10 @@
             {% if key == current_step %}
                 <span class="progress-step active">{{ step_names[key] }}</span>
             {% elif key in completed_steps %}
-                <a href="{{ step_urls[key] }}{% if order_id %}?order_id={{ order_id }}{% endif %}" class="progress-step done">✅ {{ step_names[key].split(' ', 1)[1] }}</a>
+                <a href="{{ step_urls[key] }}{% if order_id %}?order_id={{ order_id }}{% endif %}" 
+                   class="progress-step done leave-check">
+                    ✅ {{ step_names[key].split(' ', 1)[1] }}
+                </a>
             {% else %}
                 <span class="progress-step future">⏳ {{ step_names[key].split(' ', 1)[1] }}</span>
             {% endif %}
@@ -226,5 +229,36 @@
 
     {% block content %}{% endblock %}
     {% block extra_js %}{% endblock %}
+    <script>
+        document.querySelectorAll('.leave-check').forEach(link => {
+            link.addEventListener('click', function(e) {
+                const btnNext = document.getElementById('btnNext');
+                if (btnNext && btnNext.disabled) {
+                    const stepOrder = ["order", "gch", "g3", "pg3", "visual", "measurements"];
+                    const currentKey = "{{ current_step }}";
+                    const href = this.getAttribute('href');
+                    
+                    // Определяем ключ шага по URL
+                    let targetKey = null;
+                    for (const [key, url] of Object.entries({
+                        "order": "/", "gch": "/check-gch", "g3": "/check-g3",
+                        "pg3": "/check-pg3", "visual": "/visual-check", "measurements": "/measurements"
+                    })) {
+                        if (href.includes(url) && url !== '/') { targetKey = key; break; }
+                        if (url === '/' && href === '/' || href.startsWith('/?order_id=')) { targetKey = 'order'; break; }
+                    }
+                    
+                    const currentIndex = stepOrder.indexOf(currentKey);
+                    const targetIndex = stepOrder.indexOf(targetKey);
+                    
+                    // Блокируем только если идём вперёд
+                    if (targetIndex > currentIndex) {
+                        e.preventDefault();
+                        alert('⚠️ Заполните все обязательные поля перед переходом вперёд!');
+                    }
+                }
+            });
+        });
+    </script> 
 </body>
 </html>

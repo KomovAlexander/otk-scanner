@@ -59,7 +59,27 @@ def init_db():
             FOREIGN KEY (order_id) REFERENCES orders(id)
         )
     """)
+    # Результаты визуального контроля
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS visual_results (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            order_id INTEGER NOT NULL UNIQUE,
+            data TEXT DEFAULT '{}',
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (order_id) REFERENCES orders(id)
+        )
+    """)
 
+    # Результаты измерений
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS measurement_results (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            order_id INTEGER NOT NULL UNIQUE,
+            data TEXT DEFAULT '{}',
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (order_id) REFERENCES orders(id)
+        )
+    """)
     conn.commit()
     conn.close()
 
@@ -129,3 +149,54 @@ def save_pg3(order_id: int, pg3_number: str, items: list):
     )
     conn.commit()
     conn.close()
+
+def save_visual_results(order_id: int, data: dict):
+    """Сохраняет результаты визуального контроля."""
+    import json
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "INSERT OR REPLACE INTO visual_results (order_id, data, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)",
+        (order_id, json.dumps(data, ensure_ascii=False))
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_visual_results(order_id: int) -> dict:
+    """Загружает результаты визуального контроля."""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT data FROM visual_results WHERE order_id = ?", (order_id,))
+    row = cursor.fetchone()
+    conn.close()
+    if row:
+        import json
+        return json.loads(row["data"])
+    return {}
+
+
+def save_measurement_results(order_id: int, data: dict):
+    """Сохраняет результаты измерений."""
+    import json
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "INSERT OR REPLACE INTO measurement_results (order_id, data, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)",
+        (order_id, json.dumps(data, ensure_ascii=False))
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_measurement_results(order_id: int) -> dict:
+    """Загружает результаты измерений."""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT data FROM measurement_results WHERE order_id = ?", (order_id,))
+    row = cursor.fetchone()
+    conn.close()
+    if row:
+        import json
+        return json.loads(row["data"])
+    return {}    
