@@ -735,3 +735,73 @@ def api_get_measurements(request: Request):
         data = get_measurement_results(int(order_id))
         return JSONResponse(content={"status": "ok", "data": data})
     return JSONResponse(content={"status": "error", "message": "Нет order_id"}, status_code=400)
+
+
+# ── Протокол испытаний ────────────────────────────
+@router.get("/protocol")
+def protocol_page(request: Request):
+    import json
+    import re
+    order_id = request.query_params.get("order_id", None)
+    
+    order_data = None
+    visual_data = None
+    measurement_data = None
+    gch_data = None
+    gch_sizes = []
+    g3_params = []
+    test_date = ""
+    serial_number = ""
+    
+    if order_id:
+        conn = get_db()
+        cursor = conn.cursor()
+        
+        cursor.execute("SELECT * FROM orders WHERE id = ?", (int(order_id),))
+        row = cursor.fetchone()
+        order_data = dict(row) if row else None
+        
+        if order_data:
+            from datetime import datetime
+            test_date = datetime.now().strftime("%d.%m.%Y")
+            
+            order_num = order_data.get("order_number", "")
+            match = re.search(r"ПС\d{2}[.\-](\d+)", order_num)
+            if match:
+                first_digits = match.group(1)[:4].zfill(4)
+            else:
+                first_digits = "0000"
+            
+            date_part = datetime.now().strftime("%d%m%y")
+            serial_number = f"{first_digits}{date_part}01"
+        
+        from app.database import get_visual_results, get_measurement_results
+        visual_data = get_visual_results(int(order_id))
+        measurement_data = get_measurement_results(int(order_id))
+        
+        cursor.execute("SELECT * FROM gch_data WHERE order_id = ?", (int(order_id),))
+        row = cursor.fetchone()
+        gch_data = dict(row) if row else None
+        gch_sizes = json.loads(gch_data.get("sizes", "[]")) if gch_data else []
+        
+        cursor.execute("SELECT * FROM g3_data WHERE order_id = ?", (int(order_id),))
+        row = cursor.fetchone()
+        g3_data = dict(row) if row else None
+        g3_params = json.loads(g3_data.get("params", "[]")) if g3_data else []
+        
+        conn.close()
+
+    return templates.TemplateResponse("protocol.html", {
+        "request": request,
+        "current_step": "protocol",
+        "completed_steps": ["order", "gch", "g3", "pg3", "visual", "measurements", "protocol"],
+        "order_id": order_id,
+        "order": order_data,
+        "visual": visual_data,
+        "measurements": measurement_data,
+        "gch": gch_data,
+        "gch_sizes": gch_sizes,
+        "g3_params": g3_params,
+        "test_date": test_date,
+        "serial_number": serial_number,
+    })

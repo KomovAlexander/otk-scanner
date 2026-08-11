@@ -478,5 +478,13 @@
         updateDeviations();
         checkAllFields();
     })();
+    function finishTests() {
+        if (!checkAllFields()) {
+            alert('⚠️ Заполните все измерения!');
+            return;
+        }
+        const params = new URLSearchParams(window.location.search);
+        window.location.href = '/protocol?' + params.toString();
+    }    
 </script>
 {% endblock %}

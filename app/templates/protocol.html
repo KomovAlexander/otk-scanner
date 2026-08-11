@@ -1,0 +1,320 @@
+{% extends "base.html" %}
+
+{% block title %}Протокол испытаний{% endblock %}
+
+{% block extra_css %}
+<style>
+    .protocol-header {
+        background: #1e2128;
+        border: 2px solid #3a3d45;
+        border-radius: 16px;
+        padding: 30px;
+        margin-bottom: 20px;
+        color: #e0e0e0;
+    }
+    .protocol-header h1 {
+        font-size: 20px; font-weight: 700; margin-bottom: 8px; color: #ff6b35;
+    }
+    .protocol-header .product-name {
+        font-size: 16px; color: #fff; padding: 8px 12px; margin-bottom: 4px;
+    }
+    .protocol-header .subtitle { font-size: 13px; color: #888; }
+    .protocol-header .header-right {
+        text-align: left; font-size: 13px; color: #888; line-height: 1.8; min-width: 220px;
+    }
+    .protocol-header .header-right span { color: #888; }
+    .protocol-header .header-right strong { color: #fff; margin-left: 8px; }
+
+    .protocol-section {
+        background: #1e2128; border-radius: 16px; padding: 30px; margin-bottom: 20px;
+    }
+    .check-table { width: 100%; border-collapse: collapse; margin-bottom: 12px; }
+    .check-table th, .check-table td {
+        padding: 8px 10px; text-align: left; font-size: 13px; border-bottom: 1px solid #2a2d35;
+    }
+    .check-table th { color: #ff6b35; font-weight: 600; }
+    .check-table .param-col { color: #ccc; width: 50%; }
+    .check-table .value-col { width: 22%; font-weight: 600; font-size: 12px; }
+    .check-table .result-col { width: 28%; text-align: center; font-weight: 600; font-size: 12px; }
+    .result-ok { color: #4caf50; }
+    .result-fail { color: #f44336; }
+    .result-warn { color: #ff9800; }
+    .sub-title { color: #ff6b35; font-weight: 600; font-size: 14px; margin-top: 16px; margin-bottom: 8px; }
+
+    .signatures {
+        margin-top: 40px;
+    }
+    .signature-row {
+        display: flex; justify-content: space-between; margin-bottom: 30px;
+    }
+    .signature-block {
+        width: 45%;
+    }
+    .signature-line {
+        border-bottom: 1px solid #888;
+        padding-bottom: 4px;
+        margin-bottom: 4px;
+        text-align: center;
+    }
+    .signature-label {
+        font-size: 12px; color: #888; text-align: center;
+    }
+
+    .btn-print {
+        display: block; width: 100%; padding: 16px; margin-top: 20px;
+        background: #4caf50; color: #fff; border: none; border-radius: 10px;
+        font-size: 17px; font-weight: 600; cursor: pointer;
+    }
+    .btn-print:hover { background: #388e3c; }
+
+    @media print {
+        body { background: #fff; color: #000; }
+        .progress-bar, .btn-print { display: none; }
+        .protocol-header { background: #fff; border: 2px solid #000; color: #000; }
+        .protocol-header h1 { color: #000; }
+        .protocol-header .product-name { color: #000; }
+        .protocol-header .subtitle { color: #555; }
+        .protocol-header .header-right { color: #000; }
+        .protocol-header .header-right span { color: #000; }
+        .protocol-header .header-right strong { color: #000; }
+        .protocol-section { background: #fff; border: 1px solid #000; }
+        .check-table th, .check-table td { border-color: #000; color: #000; }
+        .check-table th { color: #000; }
+        .check-table .param-col { color: #000; }
+        .sub-title { color: #000; }
+        .result-ok { color: #000; }
+        .result-fail { color: #000; font-weight: 700; }
+        .result-warn { color: #000; }
+        .signature-line { border-color: #000; }
+        .signature-label { color: #000; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-container">
+    <!-- Шапка -->
+    <div class="protocol-header">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+            <div style="flex: 1; text-align: center;">
+                <h1 style="font-size: 20px; font-weight: 700; margin-bottom: 8px; color: #ff6b35;">ПРОТОКОЛ ИСПЫТАНИЙ</h1>
+                <div style="font-size: 16px; color: #fff; margin-bottom: 4px;">{{ order.product_name if order else '—' }}</div>
+                <div style="font-size: 13px; color: #888;">(наименование оборудования)</div>
+            </div>
+            <div style="text-align: right; font-size: 13px; color: #888; line-height: 1.8; min-width: 200px;">
+                <div style="display: flex; justify-content: space-between; gap: 12px;">
+                    <span>Заказ №:</span>
+                    <strong style="color: #fff;">{{ order.order_number if order else '—' }}</strong>
+                </div>
+                <div style="display: flex; justify-content: space-between; gap: 12px;">
+                    <span>Серийный номер:</span>
+                    <strong style="color: #fff;">{{ serial_number or '_______________' }}</strong>
+                </div>
+                <div style="display: flex; justify-content: space-between; gap: 12px;">
+                    <span>Дата:</span>
+                    <strong style="color: #fff;">{{ test_date or '—' }}</strong>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- Единый блок -->
+    <div class="protocol-section">
+        <table class="check-table">
+            <thead><tr><th>Параметр</th><th>Значение</th><th>Результат</th></tr></thead>
+            <tbody>
+                <!-- 1. Визуальный осмотр -->
+                <tr><td class="sub-title" colspan="3">1. Общий визуальный осмотр</td></tr>
+                <tr>
+                    <td class="param-col">1.1 Соответствие габаритному чертежу</td>
+                    <td class="value-col">{{ 'Да' if visual.get('gch_match') == 'yes' else 'Нет' if visual.get('gch_match') == 'no' else '—' }}</td>
+                    <td class="result-col">
+                        {% if visual.get('gch_match') == 'yes' %}<span class="result-ok">Соотв.</span>
+                        {% elif visual.get('gch_match') == 'no' %}<span class="result-fail">Не соотв.</span>
+                        {% else %}<span class="result-warn">—</span>{% endif %}
+                    </td>
+                </tr>
+                {% for size in visual.get('sizes', []) %}
+                <tr>
+                    <td class="param-col">1.{{ loop.index + 1 }} Габарит {{ loop.index + 1 }} (эталон: {{ gch_sizes[loop.index0] if gch_sizes and gch_sizes[loop.index0] else '—' }} мм)</td>
+                    <td class="value-col">{{ size if size else '—' }} мм</td>
+                    <td class="result-col">
+                        {% if size and gch_sizes and gch_sizes[loop.index0] and size == gch_sizes[loop.index0] %}
+                            <span class="result-ok">Соотв.</span>
+                        {% elif size %}
+                            <span class="result-fail">Не соотв. ({{ gch_sizes[loop.index0] }})</span>
+                        {% else %}
+                            <span class="result-fail">—</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+                <tr>
+                    <td class="param-col">1.{{ visual.get('sizes', []) | length + 2 }} Цвет и качество ЛКП</td>
+                    <td class="value-col">RAL {{ visual.get('ral') or '—' }}</td>
+                    <td class="result-col">
+                        {% if visual.get('ral') %}<span class="result-ok">Соотв.</span>{% else %}<span class="result-fail">—</span>{% endif %}
+                    </td>
+                </tr>
+                <tr>
+                    <td class="param-col">1.{{ visual.get('sizes', []) | length + 3 }} Масса</td>
+                    <td class="value-col">{{ visual.get('mass') or '—' }} кг</td>
+                    <td class="result-col">
+                        {% if visual.get('mass') %}<span class="result-ok">Соотв.</span>{% else %}<span class="result-fail">—</span>{% endif %}
+                    </td>
+                </tr>
+
+                <!-- 2. Гидравлическая схема -->
+                <tr><td class="sub-title" colspan="3">2. Проверка гидравлической схемы</td></tr>
+                <tr>
+                    <td class="param-col">2.1 Соответствие гидравлической схеме</td>
+                    <td class="value-col">
+                        {% set scheme = visual.get('g3_checks', []) | selectattr('name', 'equalto', 'Гидравлическая схема') | list | first %}
+                        {{ 'Да' if scheme and scheme.value == 'yes' else 'Нет' if scheme and scheme.value == 'no' else '—' }}
+                    </td>
+                    <td class="result-col">
+                        {% if scheme and scheme.value == 'yes' %}<span class="result-ok">Соотв.</span>
+                        {% elif scheme and scheme.value == 'no' %}<span class="result-fail">Не соотв.</span>
+                        {% else %}<span class="result-warn">—</span>{% endif %}
+                    </td>
+                </tr>
+                <tr>
+                    <td class="param-col">2.2 Размеры и расположение мест подключения</td>
+                    <td class="value-col">
+                        {% set outlets = visual.get('g3_checks', []) | selectattr('name', 'equalto', 'Размеры выходов') | list | first %}
+                        {{ 'Да' if outlets and outlets.value == 'yes' else 'Нет' if outlets and outlets.value == 'no' else '—' }}
+                    </td>
+                    <td class="result-col">
+                        {% if outlets and outlets.value == 'yes' %}<span class="result-ok">Соотв.</span>
+                        {% elif outlets and outlets.value == 'no' %}<span class="result-fail">Не соотв.</span>
+                        {% else %}<span class="result-warn">—</span>{% endif %}
+                    </td>
+                </tr>
+                {% for val in visual.get('g3_values', []) %}
+                {% set etalon = g3_params | selectattr('name', 'equalto', val.name) | list | first %}
+                <tr>
+                    <td class="param-col">2.{{ loop.index + 2 }} {{ val.name or 'Параметр' }} (эталон: {{ etalon.value if etalon else '—' }} {{ etalon.unit if etalon else val.unit or '' }})</td>
+                    <td class="value-col">{{ val.value or '—' }} {{ val.unit or '' }}</td>
+                    <td class="result-col">
+                        {% if val.value and etalon %}
+                            {% if val.value | string == etalon.value | string %}<span class="result-ok">Соотв.</span>
+                            {% else %}<span class="result-fail">Не соотв.</span>{% endif %}
+                        {% else %}<span class="result-fail">—</span>{% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+
+                <!-- 3. Комплектация -->
+                <tr><td class="sub-title" colspan="3">3. Комплектация</td></tr>
+                <tr>
+                    <td class="param-col">3.1 Соответствие перечню элементов (ПГ3)</td>
+                    <td class="value-col">
+                        {% set confirmed = visual.get('pg3_confirmed', []) | selectattr('confirmed', 'true') | list | length %}
+                        {% set total = visual.get('pg3_confirmed', []) | length %}
+                        {{ confirmed }}/{{ total }}
+                    </td>
+                    <td class="result-col">
+                        {% if confirmed == total and total > 0 %}<span class="result-ok">Соотв.</span>
+                        {% elif total > 0 %}<span class="result-fail">Не соотв.</span>
+                        {% else %}<span class="result-warn">—</span>{% endif %}
+                    </td>
+                </tr>
+
+                <!-- 4. Измерения -->
+                {% if measurements %}
+                <tr><td class="sub-title" colspan="3">4. Результаты настройки и измерений</td></tr>
+
+                {% if measurements.get('g3_values') %}
+                <tr><td class="param-col" colspan="3" style="color:#ff6b35; font-weight:600; padding-top:8px;">Насосные агрегаты</td></tr>
+                {% for val in measurements.g3_values %}
+                <tr>
+                    <td class="param-col">{{ val.name or 'Параметр' }} (эталон: {{ val.etalon or '—' }} {{ val.unit or '' }})</td>
+                    <td class="value-col">{{ val.value or '—' }} {{ val.unit or '' }}</td>
+                    <td class="result-col">
+                        {% if val.value and val.etalon %}
+                            {% set et = val.etalon | float %}{% set vl = val.value | float %}
+                            {% set tol = (et * 0.05) | round(1) %}{% if tol == 0 %}{% set tol = 0.5 %}{% endif %}
+                            {% if vl >= et - tol and vl <= et + tol %}<span class="result-ok">В норме</span>
+                            {% else %}<span class="result-fail">Не соотв. ({{ et }})</span>{% endif %}
+                        {% elif val.value %}<span class="result-warn">—</span>
+                        {% else %}<span class="result-fail">—</span>{% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+                {% endif %}
+
+                {% if measurements.get('currents') %}
+                <tr><td class="param-col" colspan="3" style="color:#ff6b35; font-weight:600; padding-top:8px;">Электродвигатели</td></tr>
+                <tr>
+                    <td class="param-col" colspan="3">
+                        <table class="check-table sub-table" style="margin:0;">
+                            <thead><tr><th>Режим</th><th>Фаза A</th><th>Фаза B</th><th>Фаза C</th><th>Номинал</th></tr></thead>
+                            {% set idle = measurements.currents | selectattr('mode', 'equalto', 'idle') | list %}
+                            {% set load = measurements.currents | selectattr('mode', 'equalto', 'load') | list %}
+                            <tr>
+                                <td>Холостой ход</td>
+                                <td>{{ idle[0].value if idle[0] else '—' }} А</td>
+                                <td>{{ idle[1].value if idle[1] else '—' }} А</td>
+                                <td>{{ idle[2].value if idle[2] else '—' }} А</td>
+                                <td rowspan="2">{{ measurements.nominal_current or '—' }} А</td>
+                            </tr>
+                            <tr>
+                                <td>Под нагрузкой</td>
+                                <td>{{ load[0].value if load[0] else '—' }} А</td>
+                                <td>{{ load[1].value if load[1] else '—' }} А</td>
+                                <td>{{ load[2].value if load[2] else '—' }} А</td>
+                            </tr>
+                        </table>
+                    </td>
+                </tr>
+                {% endif %}
+
+                <tr><td class="param-col" colspan="3" style="color:#ff6b35; font-weight:600; padding-top:8px;">Прочее</td></tr>
+                <tr>
+                    <td class="param-col">Уровень шума (холостой / нагрузка)</td>
+                    <td class="value-col">{{ measurements.noise_idle or '—' }} / {{ measurements.noise_load or '—' }} дБ</td>
+                    <td class="result-col">{% if measurements.noise_idle %}<span class="result-ok">В норме</span>{% else %}<span class="result-fail">—</span>{% endif %}</td>
+                </tr>
+                <tr>
+                    <td class="param-col">Температура рабочей жидкости</td>
+                    <td class="value-col">{{ measurements.temp or '—' }} °C</td>
+                    <td class="result-col">{% if measurements.temp %}<span class="result-ok">В норме</span>{% else %}<span class="result-fail">—</span>{% endif %}</td>
+                </tr>
+                <tr>
+                    <td class="param-col">Рабочая жидкость</td>
+                    <td class="value-col">{{ measurements.fluid_custom or measurements.fluid or '—' }}</td>
+                    <td class="result-col">{% if measurements.fluid or measurements.fluid_custom %}<span class="result-ok">В норме</span>{% else %}<span class="result-fail">—</span>{% endif %}</td>
+                </tr>
+                {% endif %}
+            </tbody>
+        </table>
+
+        <!-- Подписи -->
+        <div style="margin-top: 40px; display: flex; flex-direction: column; gap: 16px;">
+            <div style="display: flex; align-items: flex-end; gap: 16px;">
+                <div style="width: 30%; font-size: 13px; color: #888; padding-bottom: 18px;">Испытатель</div>
+                <div style="width: 35%; text-align: center;">
+                    <div style="border-bottom: 1px solid #888;"></div>
+                    <div style="font-size: 11px; color: #666; margin-top: 2px;">(подпись)</div>
+                </div>
+                <div style="width: 35%; text-align: center;">
+                    <div style="border-bottom: 1px solid #888;"></div>
+                    <div style="font-size: 11px; color: #666; margin-top: 2px;">(Ф.И.О.)</div>
+                </div>
+            </div>
+            <div style="display: flex; align-items: flex-end; gap: 16px;">
+                <div style="width: 30%; font-size: 13px; color: #888; padding-bottom: 18px;">Контролёр ОТК</div>
+                <div style="width: 35%; text-align: center;">
+                    <div style="border-bottom: 1px solid #888;"></div>
+                    <div style="font-size: 11px; color: #666; margin-top: 2px;">(подпись)</div>
+                </div>
+                <div style="width: 35%; text-align: center;">
+                    <div style="border-bottom: 1px solid #888;"></div>
+                    <div style="font-size: 11px; color: #666; margin-top: 2px;">(Ф.И.О.)</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <button class="btn-print" onclick="window.print()">Печать протокола</button>
+</div>
+{% endblock %}
