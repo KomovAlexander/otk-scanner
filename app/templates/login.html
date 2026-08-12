@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+
+{% block title %}Вход — ОТК{% endblock %}
+
+{% block extra_css %}
+<style>
+    .login-body {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 100vh;
+    }
+    .login-card {
+        background: #1e2128;
+        border-radius: 16px;
+        padding: 40px;
+        width: 400px;
+    }
+    .login-card h1 {
+        font-size: 24px;
+        color: #ff6b35;
+        margin-bottom: 6px;
+    }
+    .login-card .subtitle {
+        color: #888;
+        font-size: 14px;
+        margin-bottom: 24px;
+    }
+    .error-msg {
+        background: #3a2020;
+        color: #f44336;
+        padding: 10px 14px;
+        border-radius: 8px;
+        margin-bottom: 16px;
+        font-size: 14px;
+    }
+    .form-group {
+        margin-bottom: 16px;
+    }
+    .form-group label {
+        display: block;
+        font-size: 13px;
+        color: #888;
+        margin-bottom: 6px;
+    }
+    .form-group input {
+        width: 100%;
+        padding: 12px 14px;
+        background: #2a2d35;
+        border: 1px solid #3a3d45;
+        border-radius: 8px;
+        color: #fff;
+        font-size: 15px;
+    }
+    .btn-login {
+        width: 100%;
+        padding: 14px;
+        background: #ff6b35;
+        color: #fff;
+        border: none;
+        border-radius: 8px;
+        font-size: 16px;
+        font-weight: 600;
+        cursor: pointer;
+        margin-top: 8px;
+    }
+    .btn-login:hover { background: #e55a2b; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="login-body">
+    <div class="login-card">
+        <h1>ОТК Сканер</h1>
+        <p class="subtitle">Вход в систему контроля качества</p>
+        
+        {% if error %}
+        <div class="error-msg">Неверный логин или пароль</div>
+        {% endif %}
+        
+        <form method="post" action="/login">
+            <div class="form-group">
+                <label>Логин</label>
+                <input type="text" name="login" placeholder="Введите логин" required autofocus>
+            </div>
+            <div class="form-group">
+                <label>Пароль</label>
+                <input type="password" name="password" placeholder="Введите пароль" required>
+            </div>
+            <button type="submit" class="btn-login">Войти</button>
+        </form>
+    </div>
+</div>
+{% endblock %}

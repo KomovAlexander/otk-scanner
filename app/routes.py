@@ -1,10 +1,13 @@
-from fastapi import APIRouter, Request, File, UploadFile, Form
-from fastapi.templating import Jinja2Templates
-from fastapi.responses import JSONResponse
 import os
 import shutil
-from app.ocr_engine import scan_document
+
+from fastapi import APIRouter, File, Form, Request, UploadFile
+from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.templating import Jinja2Templates
+
+from app.auth import authenticate, get_current_user, require_auth
 from app.database import get_db
+from app.ocr_engine import scan_document
 
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
@@ -46,48 +49,32 @@ def get_saved_file_path(order_id: int, doc_type: str) -> str | None:
 # ── Главная страница = сразу сканирование ──────────
 @router.get("/")
 def scan_page(request: Request):
+    user = get_current_user(request)
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+    
     order_id = request.query_params.get("order_id", "")
-
     order_data = None
     saved_photo = None
     completed_steps = []
-
+    
     if order_id:
         conn = get_db()
         cursor = conn.cursor()
         cursor.execute("SELECT * FROM orders WHERE id = ?", (int(order_id),))
         row = cursor.fetchone()
         order_data = dict(row) if row else None
-
         if order_data:
             completed_steps.append("order")
             saved_photo = get_saved_file_path(int(order_id), "order")
-
-        # Проверяем ГЧ
-        if order_data:
-            cursor.execute(
-                "SELECT id FROM gch_data WHERE order_id = ?", (int(order_id),))
-            if cursor.fetchone():
-                completed_steps.append("gch")
-        # Проверяем Г3
-        if order_data:
-            cursor.execute(
-                "SELECT id FROM g3_data WHERE order_id = ?", (int(order_id),))
-            if cursor.fetchone():
-                completed_steps.append("g3")
-        # Проверяем ПГ3
-        if order_data:
-            cursor.execute(
-                "SELECT id FROM pg3_data WHERE order_id = ?", (int(order_id),))
-            if cursor.fetchone():
-                completed_steps.append("pg3")
-        if order_data:
-            cursor.execute(
-                "SELECT id FROM pg3_data WHERE order_id = ?", (int(order_id),))
-            if cursor.fetchone():
-                completed_steps.append("visual")
-                completed_steps.append("measurements")
+        cursor.execute("SELECT id FROM gch_data WHERE order_id = ?", (int(order_id),))
+        if cursor.fetchone(): completed_steps.append("gch")
+        cursor.execute("SELECT id FROM g3_data WHERE order_id = ?", (int(order_id),))
+        if cursor.fetchone(): completed_steps.append("g3")
+        cursor.execute("SELECT id FROM pg3_data WHERE order_id = ?", (int(order_id),))
+        if cursor.fetchone(): completed_steps.append("pg3")
         conn.close()
+        completed_steps = check_visual_completed(order_id, completed_steps)
 
     return templates.TemplateResponse("scan.html", {
         "request": request,
@@ -96,6 +83,7 @@ def scan_page(request: Request):
         "order_id": order_id,
         "order_data": order_data,
         "saved_photo": saved_photo,
+        "user": user,  # ← добавить
     })
 
 
@@ -187,6 +175,9 @@ def check_product_match(order_id: str, found_product: str) -> str | None:
 # ── Страница сканирования ГЧ ──────────────────────
 @router.get("/check-gch")
 def check_gch_page(request: Request):
+    user = get_current_user(request)
+    if not user:
+        return RedirectResponse("/login", status_code=303)    
     order_id = request.query_params.get("order_id", "")
 
     gch_data = None
@@ -241,6 +232,7 @@ def check_gch_page(request: Request):
         "gch_product": order_data.get("product_name", "") if order_data else "",
         "gch_ral": gch_data.get("ral", "") if gch_data else "",
         "gch_sizes": json.loads(gch_data.get("sizes", "[]")) if gch_data else [],
+        "user": user,
     })
 
 
@@ -325,6 +317,9 @@ async def api_save_gch(request: Request):
 # ── Страница сканирования Г3 ──────────────────────
 @router.get("/check-g3")
 def check_g3_page(request: Request):
+    user = get_current_user(request)
+    if not user:
+        return RedirectResponse("/login", status_code=303)
     order_id = request.query_params.get("order_id", "")
 
     g3_data = None
@@ -378,6 +373,7 @@ def check_g3_page(request: Request):
         "g3_number": g3_data.get("g3_number", "") if g3_data else "",
         "g3_product": order_data.get("product_name", "") if order_data else "",
         "g3_params": json.loads(g3_data.get("params", "[]")) if g3_data else [],
+        "user": user,
     })
 
 
@@ -457,6 +453,9 @@ async def api_save_g3(request: Request):
 # ── Страница сканирования ПГ3 ─────────────────────
 @router.get("/check-pg3")
 def check_pg3_page(request: Request):
+    user = get_current_user(request)
+    if not user:
+        return RedirectResponse("/login", status_code=303)    
     order_id = request.query_params.get("order_id", "")
 
     pg3_data = None
@@ -509,6 +508,7 @@ def check_pg3_page(request: Request):
         "pg3_number": pg3_data.get("pg3_number", "") if pg3_data else "",
         "pg3_product": order_data.get("product_name", "") if order_data else "",
         "pg3_items": json.loads(pg3_data.get("items", "[]")) if pg3_data else [],
+        "user": user,
     })
 
 
@@ -610,6 +610,9 @@ async def api_save_measurements(request: Request):
 # ── Страница визуального контроля ──────────────────
 @router.get("/visual-check")
 def visual_check_page(request: Request):
+    user = get_current_user(request)
+    if not user:
+        return RedirectResponse("/login", status_code=303)    
     order_id = request.query_params.get("order_id", None)
 
     gch_data = None
@@ -669,13 +672,15 @@ def visual_check_page(request: Request):
         "gch_ral": gch_data.get("ral", "") if gch_data else "",
         "g3_params": json.loads(g3_data.get("params", "[]")) if g3_data else [],
         "pg3_items": json.loads(pg3_data.get("items", "[]")) if pg3_data else [],
+        "user": user,        
     })
 
 # ── Страница испытаний ────────────────────────────
-
-
 @router.get("/measurements")
 def measurements_page(request: Request):
+    user = get_current_user(request)
+    if not user:
+        return RedirectResponse("/login", status_code=303)    
     order_id = request.query_params.get("order_id", None)
 
     order_data = None
@@ -713,6 +718,7 @@ def measurements_page(request: Request):
         "order_id": order_id,
         "order": order_data,
         "g3_params": json.loads(g3_data.get("params", "[]")) if g3_data else [],
+        "user": user,        
     })
 
 
@@ -739,6 +745,9 @@ def api_get_measurements(request: Request):
 # ── Страница фотографирования ─────────────────────
 @router.get("/photo")
 def photo_page(request: Request):
+    user = get_current_user(request)
+    if not user:
+        return RedirectResponse("/login", status_code=303)    
     order_id = request.query_params.get("order_id", None)
     order_data = None
     if order_id:
@@ -755,6 +764,7 @@ def photo_page(request: Request):
         "completed_steps": ["order", "gch", "g3", "pg3", "visual", "measurements", "protocol", "photo"],
         "order_id": order_id,
         "order": order_data,
+        "user": user,        
     })
 
 
@@ -802,6 +812,9 @@ async def api_upload_photo(request: Request, file: UploadFile = File(...)):
 def protocol_page(request: Request):
     import json
     import re
+    user = get_current_user(request)
+    if not user:
+        return RedirectResponse("/login", status_code=303)    
     order_id = request.query_params.get("order_id", None)
     
     order_data = None
@@ -835,7 +848,7 @@ def protocol_page(request: Request):
             date_part = datetime.now().strftime("%d%m%y")
             serial_number = f"{first_digits}{date_part}01"
         
-        from app.database import get_visual_results, get_measurement_results
+        from app.database import get_measurement_results, get_visual_results
         visual_data = get_visual_results(int(order_id))
         measurement_data = get_measurement_results(int(order_id))
         
@@ -864,5 +877,33 @@ def protocol_page(request: Request):
         "g3_params": g3_params,
         "test_date": test_date,
         "serial_number": serial_number,
+        "user": user,        
     })
 
+# ── Логин ────────────────────────────────────────
+@router.get("/login")
+def login_page(request: Request, error: str = ""):
+    user = get_current_user(request)
+    if user:
+        return RedirectResponse("/", status_code=303)
+    return templates.TemplateResponse("login.html", {"request": request, "error": error})
+
+
+@router.post("/login")
+async def login(request: Request):
+    form = await request.form()
+    login = form.get("login", "").strip()
+    password = form.get("password", "").strip()
+    
+    user = authenticate(login, password)
+    if user:
+        request.session["user_id"] = user["id"]
+        return RedirectResponse("/", status_code=303)
+    
+    return RedirectResponse("/login?error=1", status_code=303)
+
+
+@router.get("/logout")
+def logout(request: Request):
+    request.session.clear()
+    return RedirectResponse("/login", status_code=303)

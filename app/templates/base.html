@@ -177,7 +177,42 @@
             background: #2a2d35;
             color: #666;
         }
-
+        .top-bar {
+            background: #14161a;
+            padding: 10px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #2a2d35;
+        }
+        .top-bar .user-info {
+            font-size: 13px;
+            color: #888;
+        }
+        .top-bar .user-info strong {
+            color: #fff;
+        }
+        .top-bar .nav-links {
+            display: flex;
+            gap: 12px;
+        }
+        .top-bar .nav-links a {
+            color: #888;
+            text-decoration: none;
+            font-size: 13px;
+        }
+        .top-bar .nav-links a:hover {
+            color: #fff;
+        }
+        .role-badge {
+            padding: 3px 8px;
+            border-radius: 6px;
+            font-size: 11px;
+            margin-left: 8px;
+            font-weight: 600;
+        }
+        .role-admin { background: #ff6b35; color: #fff; }
+        .role-tester { background: #4caf50; color: #fff; }
         @media (max-width: 480px) {
             .page-header h1 { font-size: 20px; }
             .capture-zone { padding: 20px 14px; }
@@ -191,6 +226,26 @@
     {% block extra_css %}{% endblock %}
 </head>
 <body>
+    <!-- Шапка с пользователем -->
+    {% if user %}
+    <div class="top-bar">
+        <div class="user-info">
+            Здравствуй, <strong>{{ user.first_name or user.login }}</strong>
+            {% if user.role == 'admin' %}
+            <span class="role-badge role-admin">Админ</span>
+            {% else %}
+            <span class="role-badge role-tester">Испытатель</span>
+            {% endif %}
+        </div>
+        <div class="nav-links">
+            {% if user.role == 'admin' %}
+            <a href="/admin">⚙️ Админка</a>
+            {% endif %}
+            <a href="/logout" style="color:#f44336;">🚪 Выйти</a>
+        </div>
+    </div>
+    {% endif %}
+
     <!-- Прогресс-бар -->
     {% set step_order = ["order", "gch", "g3", "pg3", "visual", "measurements", "protocol", "photo"] %}
     {% set step_names = {

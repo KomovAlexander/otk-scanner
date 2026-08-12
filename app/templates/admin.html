@@ -1,0 +1,181 @@
+{% extends "base.html" %}
+
+{% block title %}Админка — ОТК{% endblock %}
+
+{% block extra_css %}
+<style>
+    .admin-body {
+        display: flex;
+        min-height: 100vh;
+    }
+    .admin-sidebar {
+        width: 220px;
+        background: #14161a;
+        padding: 30px 20px;
+    }
+    .admin-sidebar h2 {
+        color: #ff6b35;
+        font-size: 18px;
+        margin-bottom: 20px;
+    }
+    .admin-sidebar a {
+        display: block;
+        color: #bbb;
+        text-decoration: none;
+        padding: 10px 14px;
+        border-radius: 8px;
+        font-size: 14px;
+        margin-bottom: 4px;
+    }
+    .admin-sidebar a:hover { background: #1e2128; color: #fff; }
+    .admin-content {
+        flex: 1;
+        padding: 30px;
+    }
+    .admin-content h1 {
+        font-size: 22px;
+        margin-bottom: 20px;
+        color: #ff6b35;
+    }
+    .users-table {
+        width: 100%;
+        border-collapse: collapse;
+        background: #1e2128;
+        border-radius: 12px;
+        overflow: hidden;
+    }
+    .users-table th, .users-table td {
+        padding: 12px 16px;
+        text-align: left;
+        font-size: 14px;
+        border-bottom: 1px solid #2a2d35;
+    }
+    .users-table th { background: #2a2d35; color: #ff6b35; }
+    .role-badge {
+        padding: 4px 10px;
+        border-radius: 6px;
+        font-size: 12px;
+        font-weight: 600;
+    }
+    .role-admin { background: #ff6b35; color: #fff; }
+    .role-tester { background: #4caf50; color: #fff; }
+    .btn-sm {
+        padding: 6px 12px;
+        border-radius: 6px;
+        font-size: 12px;
+        cursor: pointer;
+        text-decoration: none;
+        display: inline-block;
+    }
+    .btn-delete { background: #f44336; color: #fff; border: none; }
+    .btn-delete:hover { background: #d32f2f; }
+    .btn-add {
+        padding: 12px 20px;
+        background: #4caf50;
+        color: #fff;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 14px;
+        margin-bottom: 20px;
+    }
+    .modal {
+        display: none;
+        position: fixed;
+        top: 0; left: 0; width: 100%; height: 100%;
+        background: rgba(0,0,0,0.7);
+        justify-content: center; align-items: center;
+    }
+    .modal.active { display: flex; }
+    .modal-content {
+        background: #1e2128;
+        border-radius: 16px;
+        padding: 30px;
+        width: 400px;
+    }
+    .modal-content h2 { margin-bottom: 16px; }
+    .modal-content input, .modal-content select {
+        width: 100%;
+        padding: 10px 12px;
+        background: #2a2d35;
+        border: 1px solid #3a3d45;
+        border-radius: 8px;
+        color: #fff;
+        font-size: 14px;
+        margin-bottom: 12px;
+    }
+    .modal-buttons {
+        display: flex;
+        gap: 10px;
+        margin-top: 16px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="admin-body">
+    <div class="admin-sidebar">
+        <h2>Админка</h2>
+        <a href="/admin">👥 Пользователи</a>
+        <a href="/">📷 Сканер</a>
+        <a href="/logout" style="color:#f44336;">🚪 Выйти</a>
+    </div>
+    <div class="admin-content">
+        <h1>Управление пользователями</h1>
+        <button class="btn-add" onclick="openModal()">+ Создать пользователя</button>
+        
+        <table class="users-table">
+            <thead>
+                <tr><th>Логин</th><th>Имя</th><th>Фамилия</th><th>Роль</th><th>Действия</th></tr>
+            </thead>
+            <tbody>
+                {% for u in users %}
+                <tr>
+                    <td>{{ u.login }}</td>
+                    <td>{{ u.first_name }}</td>
+                    <td>{{ u.last_name }}</td>
+                    <td>
+                        {% if u.role == 'admin' %}
+                        <span class="role-badge role-admin">Админ</span>
+                        {% else %}
+                        <span class="role-badge role-tester">Испытатель</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if u.login != 'admin' %}
+                        <a href="/admin/users/delete/{{ u.id }}" class="btn-sm btn-delete" onclick="return confirm('Удалить пользователя {{ u.login }}?')">Удалить</a>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Модалка создания -->
+<div class="modal" id="createModal">
+    <div class="modal-content">
+        <h2>Новый пользователь</h2>
+        <form method="post" action="/admin/users/create">
+            <input type="text" name="login" placeholder="Логин" required>
+            <input type="password" name="password" placeholder="Пароль" required>
+            <input type="text" name="first_name" placeholder="Имя">
+            <input type="text" name="last_name" placeholder="Фамилия">
+            <select name="role">
+                <option value="tester">Испытатель</option>
+                <option value="admin">Администратор</option>
+            </select>
+            <div class="modal-buttons">
+                <button type="submit" class="btn-add">Создать</button>
+                <button type="button" class="btn-sm" style="background:#555;" onclick="closeModal()">Отмена</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+    function openModal() { document.getElementById('createModal').classList.add('active'); }
+    function closeModal() { document.getElementById('createModal').classList.remove('active'); }
+</script>
+{% endblock %}

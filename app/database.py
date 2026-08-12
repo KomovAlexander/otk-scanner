@@ -80,6 +80,18 @@ def init_db():
             FOREIGN KEY (order_id) REFERENCES orders(id)
         )
     """)
+    # Пользователи
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            login TEXT UNIQUE NOT NULL,
+            password_hash TEXT NOT NULL,
+            first_name TEXT DEFAULT '',
+            last_name TEXT DEFAULT '',
+            role TEXT DEFAULT 'tester',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)    
     conn.commit()
     conn.close()
 
@@ -200,3 +212,86 @@ def get_measurement_results(order_id: int) -> dict:
         import json
         return json.loads(row["data"])
     return {}    
+
+def create_default_admin():
+    """Создаёт админа по умолчанию, если пользователей нет."""
+    import hashlib
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT COUNT(*) FROM users")
+    if cursor.fetchone()[0] == 0:
+        password_hash = hashlib.sha256("admin".encode()).hexdigest()
+        cursor.execute(
+            "INSERT INTO users (login, password_hash, first_name, last_name, role) VALUES (?, ?, ?, ?, ?)",
+            ("admin", password_hash, "Админ", "Системы", "admin"),
+        )
+        conn.commit()
+    conn.close()
+
+
+def get_user_by_login(login: str) -> dict | None:
+    """Находит пользователя по логину."""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM users WHERE login = ?", (login,))
+    row = cursor.fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def get_all_users() -> list:
+    """Возвращает всех пользователей."""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM users ORDER BY id")
+    users = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+    return users
+
+
+def create_user(login: str, password: str, first_name: str, last_name: str, role: str = "tester") -> int:
+    """Создаёт пользователя и возвращает его ID."""
+    import hashlib
+    conn = get_db()
+    cursor = conn.cursor()
+    password_hash = hashlib.sha256(password.encode()).hexdigest()
+    cursor.execute(
+        "INSERT INTO users (login, password_hash, first_name, last_name, role) VALUES (?, ?, ?, ?, ?)",
+        (login, password_hash, first_name, last_name, role),
+    )
+    conn.commit()
+    user_id = cursor.lastrowid
+    conn.close()
+    return user_id
+
+
+def delete_user(user_id: int):
+    """Удаляет пользователя."""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM users WHERE id = ? AND login != 'admin'", (user_id,))
+    conn.commit()
+    conn.close()
+
+
+def update_user(user_id: int, first_name: str, last_name: str, role: str):
+    """Обновляет данные пользователя."""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "UPDATE users SET first_name=?, last_name=?, role=? WHERE id=?",
+        (first_name, last_name, role, user_id),
+    )
+    conn.commit()
+    conn.close()
+
+
+def update_user_password(user_id: int, new_password: str):
+    """Обновляет пароль пользователя."""
+    import hashlib
+    conn = get_db()
+    cursor = conn.cursor()
+    password_hash = hashlib.sha256(new_password.encode()).hexdigest()
+    cursor.execute("UPDATE users SET password_hash=? WHERE id=?", (password_hash, user_id))
+    conn.commit()
+    conn.close()
