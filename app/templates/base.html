@@ -192,7 +192,7 @@
 </head>
 <body>
     <!-- Прогресс-бар -->
-    {% set step_order = ["order", "gch", "g3", "pg3", "visual", "measurements", "protocol"] %}
+    {% set step_order = ["order", "gch", "g3", "pg3", "visual", "measurements", "protocol", "photo"] %}
     {% set step_names = {
         "order": "📷 Заказ", 
         "gch": "📐 ГЧ", 
@@ -200,7 +200,8 @@
         "pg3": "📋 ПГ3", 
         "visual": "🔍 Контроль",
         "measurements": "⚡ Измерения",
-        "protocol": "📋 Протокол"
+        "photo": "📸 Фото",
+        "protocol": "📄 Протокол"
     } %}
     {% set step_urls = {
         "order": "/", 
@@ -209,6 +210,7 @@
         "pg3": "/check-pg3", 
         "visual": "/visual-check",
         "measurements": "/measurements",
+        "photo": "/photo",
         "protocol": "/protocol"
     } %}
     

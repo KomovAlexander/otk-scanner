@@ -316,5 +316,14 @@
     </div>
 
     <button class="btn-print" onclick="window.print()">Печать протокола</button>
+    <button class="btn-next" onclick="goToPhoto()">Далее — фотографирование</button>
 </div>
+{% endblock %}
+{% block extra_js %}
+<script>
+    function goToPhoto() {
+        const params = new URLSearchParams(window.location.search);
+        window.location.href = '/photo?' + params.toString();
+    }    
+</script>
 {% endblock %}

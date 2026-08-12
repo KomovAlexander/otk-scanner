@@ -736,6 +736,66 @@ def api_get_measurements(request: Request):
         return JSONResponse(content={"status": "ok", "data": data})
     return JSONResponse(content={"status": "error", "message": "Нет order_id"}, status_code=400)
 
+# ── Страница фотографирования ─────────────────────
+@router.get("/photo")
+def photo_page(request: Request):
+    order_id = request.query_params.get("order_id", None)
+    order_data = None
+    if order_id:
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM orders WHERE id = ?", (int(order_id),))
+        row = cursor.fetchone()
+        order_data = dict(row) if row else None
+        conn.close()
+
+    return templates.TemplateResponse("photo.html", {
+        "request": request,
+        "current_step": "photo",
+        "completed_steps": ["order", "gch", "g3", "pg3", "visual", "measurements", "protocol", "photo"],
+        "order_id": order_id,
+        "order": order_data,
+    })
+
+
+# ── Эндпоинт сохранения фото изделия ─────────────
+@router.post("/api/save-photo")
+async def api_save_photo(request: Request):
+    data = await request.json()
+    order_id = data.get("order_id")
+    photo_index = data.get("photo_index")  # 1, 2, 3, 4
+    
+    if not order_id or not photo_index:
+        return JSONResponse(content={"status": "error"}, status_code=400)
+    
+    # Здесь будет сохранение файла, если мы передаём base64
+    # Пока просто возвращаем OK
+    
+    return JSONResponse(content={"status": "ok", "photo_index": photo_index})
+
+
+# ── Эндпоинт загрузки фото изделия ───────────────
+@router.post("/api/upload-photo")
+async def api_upload_photo(request: Request, file: UploadFile = File(...)):
+    order_id = request.query_params.get("order_id", None)
+    photo_index = request.query_params.get("photo_index", "1")
+    
+    if not order_id:
+        return JSONResponse(content={"status": "error"}, status_code=400)
+    
+    upload_dir = os.path.join("app/static/uploads", f"order_{int(order_id)}")
+    os.makedirs(upload_dir, exist_ok=True)
+    
+    file_path = os.path.join(upload_dir, f"photo_{photo_index}.jpg")
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+    
+    return JSONResponse(content={
+        "status": "ok",
+        "photo_index": photo_index,
+        "url": f"/uploads/order_{int(order_id)}/photo_{photo_index}.jpg"
+    })
+
 
 # ── Протокол испытаний ────────────────────────────
 @router.get("/protocol")
@@ -805,3 +865,4 @@ def protocol_page(request: Request):
         "test_date": test_date,
         "serial_number": serial_number,
     })
+

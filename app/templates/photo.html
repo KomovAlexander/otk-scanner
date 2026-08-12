@@ -1,0 +1,206 @@
+{% extends "base.html" %}
+
+{% block title %}Фотографирование изделия{% endblock %}
+
+{% block extra_css %}
+<style>
+    .photo-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 16px;
+        margin-top: 20px;
+    }
+    .photo-card {
+        background: #1e2128;
+        border: 2px dashed #3a3d45;
+        border-radius: 12px;
+        padding: 20px;
+        text-align: center;
+        transition: border 0.3s;
+    }
+    .photo-card.completed {
+        border-color: #4caf50;
+        background: #1e3a1e;
+    }
+    .photo-card .icon {
+        font-size: 40px;
+        margin-bottom: 8px;
+    }
+    .photo-card .title {
+        font-size: 15px;
+        font-weight: 600;
+        color: #fff;
+        margin-bottom: 12px;
+    }
+    .photo-card img {
+        max-width: 100%;
+        max-height: 200px;
+        border-radius: 8px;
+        margin-bottom: 8px;
+    }
+    .photo-card .btn-capture {
+        padding: 10px 20px;
+        background: #ff6b35;
+        color: #fff;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 14px;
+    }
+    .photo-card .btn-capture:hover { background: #e55a2b; }
+    .photo-card .btn-capture:disabled { background: #555; cursor: not-allowed; }
+    .btn-add-photo {
+        padding: 14px;
+        background: #4caf50;
+        color: #fff;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 15px;
+        width: 100%;
+        margin-top: 16px;
+    }
+    .btn-add-photo:hover { background: #388e3c; }
+    @media (max-width: 480px) {
+        .photo-grid { grid-template-columns: 1fr; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-container">
+    <div class="page-header">
+        <h1>Фотографирование изделия</h1>
+        <p>Сфотографируйте готовую станцию с шильдиком</p>
+    </div>
+
+    <div class="info-row">
+        <div><span>Изделие:</span> {{ order.product_name if order else '—' }}</div>
+        <div><span>Заказ №:</span> {{ order.order_number if order else '—' }}</div>
+    </div>
+
+    <div class="photo-grid" id="photoGrid">
+        <!-- Фото 1 -->
+        <div class="photo-card" id="photoCard1">
+            <div class="icon">📷</div>
+            <div class="title">Вид спереди</div>
+            <img id="preview1" style="display:none;">
+            <input type="file" id="file1" accept="image/*" capture="environment" hidden>
+            <button class="btn-capture" id="btn1" onclick="takePhoto(1)">Сделать фото</button>
+        </div>
+
+        <!-- Фото 2 -->
+        <div class="photo-card" id="photoCard2">
+            <div class="icon">📷</div>
+            <div class="title">Вид справа</div>
+            <img id="preview2" style="display:none;">
+            <input type="file" id="file2" accept="image/*" capture="environment" hidden>
+            <button class="btn-capture" id="btn2" onclick="takePhoto(2)">Сделать фото</button>
+        </div>
+
+        <!-- Фото 3 -->
+        <div class="photo-card" id="photoCard3">
+            <div class="icon">📷</div>
+            <div class="title">Вид сзади</div>
+            <img id="preview3" style="display:none;">
+            <input type="file" id="file3" accept="image/*" capture="environment" hidden>
+            <button class="btn-capture" id="btn3" onclick="takePhoto(3)">Сделать фото</button>
+        </div>
+
+        <!-- Фото 4 -->
+        <div class="photo-card" id="photoCard4">
+            <div class="icon">📷</div>
+            <div class="title">Вид слева</div>
+            <img id="preview4" style="display:none;">
+            <input type="file" id="file4" accept="image/*" capture="environment" hidden>
+            <button class="btn-capture" id="btn4" onclick="takePhoto(4)">Сделать фото</button>
+        </div>
+    </div>
+
+    <button class="btn-add-photo" id="btnAddPhoto" onclick="addPhoto()">Добавить ещё фото</button>
+    <button class="btn-next" id="btnNext" onclick="finishPhotos()" style="display:none;">Завершить</button>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    let photosTaken = {};
+    let photoCount = 4;
+
+    function takePhoto(index) {
+        document.getElementById('file' + index).click();
+    }
+
+    function addPhoto() {
+        photoCount++;
+        const grid = document.getElementById('photoGrid');
+        const card = document.createElement('div');
+        card.className = 'photo-card';
+        card.id = 'photoCard' + photoCount;
+        card.innerHTML = `
+            <div class="icon">📷</div>
+            <div class="title">Фото ${photoCount}</div>
+            <img id="preview${photoCount}" style="display:none;">
+            <input type="file" id="file${photoCount}" accept="image/*" capture="environment" hidden>
+            <button class="btn-capture" id="btn${photoCount}" onclick="takePhoto(${photoCount})">Сделать фото</button>
+        `;
+        grid.appendChild(card);
+        
+        // Привязываем обработчик
+        document.getElementById('file' + photoCount).addEventListener('change', handleFile);
+    }
+
+    function handleFile(event) {
+        const input = event.target;
+        const file = input.files[0];
+        if (!file) return;
+        
+        const index = input.id.replace('file', '');
+        
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            document.getElementById('preview' + index).src = e.target.result;
+            document.getElementById('preview' + index).style.display = 'block';
+            
+            const card = document.getElementById('photoCard' + index);
+            card.classList.add('completed');
+            
+            const btn = document.getElementById('btn' + index);
+            btn.textContent = '✓ Готово';
+            btn.disabled = true;
+            
+            photosTaken[index] = true;
+            
+            const formData = new FormData();
+            formData.append('file', file);
+            const params = new URLSearchParams(window.location.search);
+            const orderId = params.get('order_id');
+            
+            fetch(`/api/upload-photo?order_id=${orderId}&photo_index=${index}`, {
+                method: 'POST',
+                body: formData
+            }).catch(err => console.error('Ошибка загрузки:', err));
+            
+            checkAllPhotos();
+        };
+        reader.readAsDataURL(file);
+    }
+
+    function checkAllPhotos() {
+        const taken = Object.keys(photosTaken).length;
+        if (taken >= 4) {
+            document.getElementById('btnNext').style.display = 'block';
+        }
+    }
+
+    function finishPhotos() {
+        const params = new URLSearchParams(window.location.search);
+        window.location.href = '/?' + params.toString();
+    }
+
+    // Привязываем обработчики к первым 4 фото
+    for (let i = 1; i <= 4; i++) {
+        document.getElementById('file' + i).addEventListener('change', handleFile);
+    }
+</script>
+{% endblock %}
