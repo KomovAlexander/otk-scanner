@@ -1,0 +1,150 @@
+{% extends "base.html" %}
+
+{% block title %}Личный кабинет — ОТК{% endblock %}
+
+{% block extra_css %}
+<style>
+    .dashboard-container {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 20px;
+    }
+    .dashboard-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 24px;
+    }
+    .dashboard-header h1 {
+        font-size: 24px;
+        color: #ff6b35;
+    }
+    .btn-new-order {
+        padding: 14px 24px;
+        background: #4caf50;
+        color: #fff;
+        border: none;
+        border-radius: 8px;
+        font-size: 15px;
+        font-weight: 600;
+        cursor: pointer;
+        text-decoration: none;
+    }
+    .btn-new-order:hover { background: #388e3c; }
+    
+    .orders-table {
+        width: 100%;
+        border-collapse: collapse;
+        background: #1e2128;
+        border-radius: 12px;
+        overflow: hidden;
+    }
+    .orders-table th, .orders-table td {
+        padding: 12px 16px;
+        text-align: left;
+        font-size: 14px;
+        border-bottom: 1px solid #2a2d35;
+    }
+    .orders-table th {
+        background: #2a2d35;
+        color: #ff6b35;
+        font-weight: 600;
+    }
+    .orders-table tr:hover {
+        background: #252830;
+    }
+    .status-badge {
+        padding: 4px 10px;
+        border-radius: 6px;
+        font-size: 12px;
+        font-weight: 600;
+    }
+    .status-in-progress {
+        background: #ff9800;
+        color: #fff;
+    }
+    .status-completed {
+        background: #4caf50;
+        color: #fff;
+    }
+    .btn-action {
+        padding: 6px 12px;
+        border-radius: 6px;
+        font-size: 12px;
+        cursor: pointer;
+        text-decoration: none;
+        display: inline-block;
+        margin: 2px;
+        border: none;
+    }
+    .btn-continue { background: #ff6b35; color: #fff; }
+    .btn-continue:hover { background: #e55a2b; }
+    .btn-protocol { background: #2196f3; color: #fff; }
+    .btn-protocol:hover { background: #1976d2; }
+    .btn-photo { background: #9c27b0; color: #fff; }
+    .btn-photo:hover { background: #7b1fa2; }
+    .btn-shild { background: #607d8b; color: #fff; }
+    .btn-shild:hover { background: #455a64; }
+    .empty-state {
+        text-align: center;
+        padding: 60px 20px;
+        color: #888;
+    }
+    .empty-state .icon { font-size: 60px; margin-bottom: 16px; }
+    .empty-state p { font-size: 16px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="dashboard-container">
+    <div class="dashboard-header">
+        <h1>Личный кабинет</h1>
+        <a href="/" class="btn-new-order">+ Новый заказ</a>
+    </div>
+
+    {% if orders %}
+    <table class="orders-table">
+        <thead>
+            <tr>
+                <th>Заказ</th>
+                <th>Изделие</th>
+                <th>Статус</th>
+                <th>Действия</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for order in orders %}
+            <tr>
+                <td>{{ order.order_number }}</td>
+                <td>{{ order.product_name }}</td>
+                <td>
+                    {% if order.is_completed %}
+                    <span class="status-badge status-completed">Завершён</span>
+                    {% else %}
+                    <span class="status-badge status-in-progress">В процессе</span>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if order.is_completed %}
+                    <a href="/protocol?order_id={{ order.id }}" class="btn-action btn-protocol">Протокол</a>
+                    <a href="/shild?order_id={{ order.id }}" class="btn-action btn-shild">Шильдик</a>
+                    {% if order.photos %}
+                    <a href="/photo?order_id={{ order.id }}" class="btn-action btn-photo">Фото ({{ order.photos | length }})</a>
+                    {% endif %}
+                    {% else %}
+                    <a href="/?order_id={{ order.id }}" class="btn-action btn-continue">Продолжить</a>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <div class="empty-state">
+        <div class="icon">📋</div>
+        <p>Заказов пока нет</p>
+        <p style="margin-top: 8px;">Нажмите «+ Новый заказ» чтобы начать проверку</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

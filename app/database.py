@@ -22,7 +22,9 @@ def init_db():
             order_number TEXT NOT NULL,
             product_name TEXT DEFAULT '',
             department TEXT DEFAULT '',
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            user_id INTEGER,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id)
         )
     """)
 
@@ -92,28 +94,30 @@ def init_db():
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)    
+    # Добавляем колонку user_id если её нет
+    cursor.execute("PRAGMA table_info(orders)")
+    columns = [row["name"] for row in cursor.fetchall()]
+    if "user_id" not in columns:
+        cursor.execute("ALTER TABLE orders ADD COLUMN user_id INTEGER")    
     conn.commit()
     conn.close()
 
 
-def get_or_create_order(order_number: str, product_name: str, department: str) -> int:
-    """Находит существующий заказ или создаёт новый."""
+def get_or_create_order(order_number: str, product_name: str, department: str, user_id: int = None) -> int:
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute("SELECT id FROM orders WHERE order_number = ?", (order_number,))
     existing = cursor.fetchone()
     if existing:
-        cursor.execute(
-            "UPDATE orders SET product_name = ?, department = ? WHERE id = ?",
-            (product_name, department, existing["id"]),
-        )
+        if user_id:
+            cursor.execute("UPDATE orders SET user_id=? WHERE id=?", (user_id, existing["id"]))
         conn.commit()
         conn.close()
         return existing["id"]
     else:
         cursor.execute(
-            "INSERT INTO orders (order_number, product_name, department) VALUES (?, ?, ?)",
-            (order_number, product_name, department),
+            "INSERT INTO orders (order_number, product_name, department, user_id) VALUES (?, ?, ?, ?)",
+            (order_number, product_name, department, user_id),
         )
         conn.commit()
         order_id = cursor.lastrowid
@@ -295,3 +299,54 @@ def update_user_password(user_id: int, new_password: str):
     cursor.execute("UPDATE users SET password_hash=? WHERE id=?", (password_hash, user_id))
     conn.commit()
     conn.close()
+
+def get_all_orders(user_id: int = None, is_admin: bool = False) -> list:
+    conn = get_db()
+    cursor = conn.cursor()
+    
+    if is_admin:
+        cursor.execute("""
+            SELECT o.*, 
+                   (SELECT COUNT(*) FROM pg3_data WHERE order_id = o.id) as has_pg3
+            FROM orders o
+            ORDER BY o.id DESC
+        """)
+    else:
+        cursor.execute("""
+            SELECT o.*, 
+                   (SELECT COUNT(*) FROM pg3_data WHERE order_id = o.id) as has_pg3
+            FROM orders o
+            WHERE o.user_id = ?
+            ORDER BY o.id DESC
+        """, (user_id,))
+    
+    orders = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+    return orders
+
+
+def get_order_photos(order_id: int) -> list:
+    """Возвращает список фото для заказа."""
+    import os
+    order_dir = os.path.join("app/static/uploads", f"order_{order_id}")
+    if not os.path.exists(order_dir):
+        return []
+    
+    photos = []
+    for f in sorted(os.listdir(order_dir)):
+        if f.startswith("photo_") and f.endswith((".jpg", ".jpeg", ".png")):
+            photos.append(f"/uploads/order_{order_id}/{f}")
+    return photos
+
+
+def is_order_completed(order_id: int) -> bool:
+    """Проверяет завершён ли заказ (есть ли фото)."""
+    import os
+    order_dir = os.path.join("app/static/uploads", f"order_{order_id}")
+    if not os.path.exists(order_dir):
+        return False
+    
+    for f in os.listdir(order_dir):
+        if f.startswith("photo_") and f.endswith((".jpg", ".jpeg", ".png")):
+            return True
+    return False    
