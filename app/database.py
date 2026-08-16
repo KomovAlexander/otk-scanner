@@ -2,6 +2,7 @@
 
 import sqlite3
 import os
+import json
 
 DB_PATH = "otk.db"
 
@@ -92,18 +93,105 @@ def init_db():
             password_hash TEXT NOT NULL,
             first_name TEXT DEFAULT '',
             last_name TEXT DEFAULT '',
+            middle_name TEXT DEFAULT '',
+            position TEXT DEFAULT '',
             role TEXT DEFAULT 'tester',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
-    """)    
+    """)
+    # Прогресс заказа
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS order_progress (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            order_id INTEGER NOT NULL UNIQUE,
+            current_step TEXT NOT NULL DEFAULT 'order',
+            completed_steps TEXT DEFAULT '[]',
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (order_id) REFERENCES orders(id)
+        )
+    """)
+
     # Добавляем колонку user_id если её нет
     cursor.execute("PRAGMA table_info(orders)")
     columns = [row["name"] for row in cursor.fetchall()]
     if "user_id" not in columns:
-        cursor.execute("ALTER TABLE orders ADD COLUMN user_id INTEGER")    
+        cursor.execute("ALTER TABLE orders ADD COLUMN user_id INTEGER")
+
     conn.commit()
     conn.close()
 
+
+# ─── Функции для работы с прогрессом заказа ───
+
+def init_order_progress(order_id: int):
+    """Создаёт запись о прогрессе для заказа, если её ещё нет."""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "INSERT OR IGNORE INTO order_progress (order_id, current_step, completed_steps) VALUES (?, 'gch', '[\"order\"]')",
+        (order_id,)
+    )
+    conn.commit()
+    conn.close()
+
+
+def update_order_step(order_id: int, current_step: str, completed_steps: list = None):
+    """Обновляет текущий шаг заказа. Если completed_steps не передан — только current_step."""
+    conn = get_db()
+    cursor = conn.cursor()
+
+    # Убедимся, что запись существует
+    cursor.execute(
+        "INSERT OR IGNORE INTO order_progress (order_id, current_step, completed_steps) VALUES (?, 'order', '[]')",
+        (order_id,)
+    )
+
+    if completed_steps is not None:
+        cursor.execute(
+            "UPDATE order_progress SET current_step=?, completed_steps=?, updated_at=CURRENT_TIMESTAMP WHERE order_id=?",
+            (current_step, json.dumps(completed_steps, ensure_ascii=False), order_id)
+        )
+    else:
+        cursor.execute(
+            "UPDATE order_progress SET current_step=?, updated_at=CURRENT_TIMESTAMP WHERE order_id=?",
+            (current_step, order_id)
+        )
+
+    conn.commit()
+    conn.close()
+
+
+def get_order_progress(order_id: int) -> dict:
+    """Возвращает прогресс заказа: {current_step, completed_steps}."""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT current_step, completed_steps FROM order_progress WHERE order_id = ?",
+        (order_id,)
+    )
+    row = cursor.fetchone()
+    conn.close()
+
+    if row:
+        return {
+            "current_step": row["current_step"],
+            "completed_steps": json.loads(row["completed_steps"]) if row["completed_steps"] else []
+        }
+    return {"current_step": "order", "completed_steps": []}
+
+
+def mark_step_completed(order_id: int, step: str, next_step: str):
+    """Отмечает шаг как пройденный и переводит на следующий."""
+    progress = get_order_progress(order_id)
+    completed = progress["completed_steps"]
+
+    if step not in completed:
+        completed.append(step)
+
+    update_order_step(order_id, next_step, completed)
+
+
+# ─── Существующие функции (без изменений) ───
 
 def get_or_create_order(order_number: str, product_name: str, department: str, user_id: int = None) -> int:
     conn = get_db()
@@ -115,6 +203,7 @@ def get_or_create_order(order_number: str, product_name: str, department: str, u
             cursor.execute("UPDATE orders SET user_id=? WHERE id=?", (user_id, existing["id"]))
         conn.commit()
         conn.close()
+        init_order_progress(existing["id"])
         return existing["id"]
     else:
         cursor.execute(
@@ -124,12 +213,12 @@ def get_or_create_order(order_number: str, product_name: str, department: str, u
         conn.commit()
         order_id = cursor.lastrowid
         conn.close()
+        init_order_progress(order_id)
         return order_id
 
 
 def save_gch(order_id: int, gch_number: str, ral: str, sizes: list):
     """Сохраняет данные ГЧ (удаляет старую запись для этого заказа)."""
-    import json
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute("DELETE FROM gch_data WHERE order_id = ?", (order_id,))
@@ -143,7 +232,6 @@ def save_gch(order_id: int, gch_number: str, ral: str, sizes: list):
 
 def save_g3(order_id: int, g3_number: str, params: list):
     """Сохраняет данные Г3 (удаляет старую запись для этого заказа)."""
-    import json
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute("DELETE FROM g3_data WHERE order_id = ?", (order_id,))
@@ -158,19 +246,26 @@ def save_g3(order_id: int, g3_number: str, params: list):
 def save_pg3(order_id: int, pg3_number: str, items: list):
     """Сохраняет данные ПГ3 (удаляет старую запись для этого заказа)."""
     import json
+    normalized_items = []
+    for item in items:
+        item = dict(item) if isinstance(item, dict) else {}
+        if not item.get("quantity"):
+            item["quantity"] = "1"
+        normalized_items.append(item)
+    
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute("DELETE FROM pg3_data WHERE order_id = ?", (order_id,))
     cursor.execute(
         "INSERT INTO pg3_data (order_id, pg3_number, items) VALUES (?, ?, ?)",
-        (order_id, pg3_number, json.dumps(items, ensure_ascii=False)),
+        (order_id, pg3_number, json.dumps(normalized_items, ensure_ascii=False)),
     )
     conn.commit()
     conn.close()
 
+
 def save_visual_results(order_id: int, data: dict):
     """Сохраняет результаты визуального контроля."""
-    import json
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute(
@@ -189,14 +284,12 @@ def get_visual_results(order_id: int) -> dict:
     row = cursor.fetchone()
     conn.close()
     if row:
-        import json
         return json.loads(row["data"])
     return {}
 
 
 def save_measurement_results(order_id: int, data: dict):
     """Сохраняет результаты измерений."""
-    import json
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute(
@@ -215,9 +308,9 @@ def get_measurement_results(order_id: int) -> dict:
     row = cursor.fetchone()
     conn.close()
     if row:
-        import json
         return json.loads(row["data"])
-    return {}    
+    return {}
+
 
 def create_default_admin():
     """Создаёт админа по умолчанию, если пользователей нет."""
@@ -255,15 +348,15 @@ def get_all_users() -> list:
     return users
 
 
-def create_user(login: str, password: str, first_name: str, last_name: str, role: str = "tester") -> int:
+def create_user(login: str, password: str, first_name: str, last_name: str, middle_name: str = "", position: str = "", role: str = "tester") -> int:
     """Создаёт пользователя и возвращает его ID."""
     import hashlib
     conn = get_db()
     cursor = conn.cursor()
     password_hash = hashlib.sha256(password.encode()).hexdigest()
     cursor.execute(
-        "INSERT INTO users (login, password_hash, first_name, last_name, role) VALUES (?, ?, ?, ?, ?)",
-        (login, password_hash, first_name, last_name, role),
+        "INSERT INTO users (login, password_hash, first_name, last_name, middle_name, position, role) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (login, password_hash, first_name, last_name, middle_name, position, role),
     )
     conn.commit()
     user_id = cursor.lastrowid
@@ -280,13 +373,13 @@ def delete_user(user_id: int):
     conn.close()
 
 
-def update_user(user_id: int, first_name: str, last_name: str, role: str):
+def update_user(user_id: int, first_name: str, last_name: str, middle_name: str = "", position: str = "", role: str = "tester"):
     """Обновляет данные пользователя."""
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute(
-        "UPDATE users SET first_name=?, last_name=?, role=? WHERE id=?",
-        (first_name, last_name, role, user_id),
+        "UPDATE users SET first_name=?, last_name=?, middle_name=?, position=?, role=? WHERE id=?",
+        (first_name, last_name, middle_name, position, role, user_id),
     )
     conn.commit()
     conn.close()
@@ -302,10 +395,11 @@ def update_user_password(user_id: int, new_password: str):
     conn.commit()
     conn.close()
 
+
 def get_all_orders(user_id: int = None, is_admin: bool = False) -> list:
     conn = get_db()
     cursor = conn.cursor()
-    
+
     if is_admin:
         cursor.execute("""
             SELECT o.*, 
@@ -321,7 +415,7 @@ def get_all_orders(user_id: int = None, is_admin: bool = False) -> list:
             WHERE o.user_id = ?
             ORDER BY o.id DESC
         """, (user_id,))
-    
+
     orders = [dict(row) for row in cursor.fetchall()]
     conn.close()
     return orders
@@ -329,11 +423,10 @@ def get_all_orders(user_id: int = None, is_admin: bool = False) -> list:
 
 def get_order_photos(order_id: int) -> list:
     """Возвращает список фото для заказа."""
-    import os
     order_dir = os.path.join("app/static/uploads", f"order_{order_id}")
     if not os.path.exists(order_dir):
         return []
-    
+
     photos = []
     for f in sorted(os.listdir(order_dir)):
         if f.startswith("photo_") and f.endswith((".jpg", ".jpeg", ".png")):
@@ -343,12 +436,11 @@ def get_order_photos(order_id: int) -> list:
 
 def is_order_completed(order_id: int) -> bool:
     """Проверяет завершён ли заказ (есть ли фото)."""
-    import os
     order_dir = os.path.join("app/static/uploads", f"order_{order_id}")
     if not os.path.exists(order_dir):
         return False
-    
+
     for f in os.listdir(order_dir):
         if f.startswith("photo_") and f.endswith((".jpg", ".jpeg", ".png")):
             return True
-    return False    
+    return False

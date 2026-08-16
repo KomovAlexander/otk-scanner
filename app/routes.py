@@ -2,13 +2,18 @@
 
 import os
 import shutil
+import uuid
 
 from fastapi import APIRouter, File, Form, Request, UploadFile
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from app.auth import authenticate, get_current_user, require_auth
-from app.database import get_db
+from app.database import (
+    get_db, get_order_progress, update_order_step, mark_step_completed,
+    get_all_orders, get_order_photos, is_order_completed,
+    get_visual_results, get_measurement_results
+)
 from app.ocr_engine import scan_document
 
 router = APIRouter()
@@ -16,6 +21,20 @@ templates = Jinja2Templates(directory="app/templates")
 
 # Папка для хранения файлов
 UPLOAD_ROOT = "app/static/uploads"
+
+# Порядок шагов
+STEP_ORDER = ["order", "gch", "g3", "pg3",
+              "visual", "measurements", "protocol", "photo"]
+STEP_URLS = {
+    "order": "/",
+    "gch": "/check-gch",
+    "g3": "/check-g3",
+    "pg3": "/check-pg3",
+    "visual": "/visual-check",
+    "measurements": "/measurements",
+    "protocol": "/protocol",
+    "photo": "/photo",
+}
 
 
 def save_uploaded_file(order_id: int, doc_type: str, file: UploadFile) -> str:
@@ -43,54 +62,78 @@ def get_saved_file_path(order_id: int, doc_type: str) -> str | None:
         file_name = f"{doc_type}{ext}"
         file_path = os.path.join(order_dir, file_name)
         if os.path.exists(file_path):
-            # Возвращаем URL-путь (без app/)
             return f"/uploads/order_{order_id}/{file_name}"
     return None
 
 
-def check_visual_completed(order_id: str, completed_steps: list) -> list:
-    """Добавляет visual и measurements в completed_steps если визуальный контроль заполнен."""
-    if not order_id:
-        return completed_steps
+def check_product_match(order_id: str, found_product: str) -> str | None:
+    """Проверяет, что изделие в документе совпадает с заказом."""
+    if not order_id or not found_product:
+        return None
+
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute(
-        "SELECT data FROM visual_results WHERE order_id = ?", (int(order_id),))
-    row = cursor.fetchone()
+        "SELECT product_name, order_number FROM orders WHERE id = ?", (int(order_id),))
+    order_row = cursor.fetchone()
     conn.close()
-    if row:
-        import json
-        data = json.loads(row["data"])
-        if data.get("gch_match") or any(s for s in (data.get("sizes") or []) if s) or data.get("ral") or data.get("mass"):
-            if "visual" not in completed_steps:
-                completed_steps.append("visual")
-            if "measurements" not in completed_steps:
-                completed_steps.append("measurements")
-    return completed_steps
+
+    if not order_row:
+        return None
+
+    order_product = order_row["product_name"]
+    order_number = order_row["order_number"]
+    order_clean = order_product.upper().replace("-", "").replace(" ", "")
+    found_clean = found_product.upper().replace("-", "").replace(" ", "")
+
+    if found_clean not in order_clean and order_clean not in found_clean:
+        return f"❌ Этот документ от изделия «{found_product}», а заказ №{order_number} на изделие «{order_product}»!"
+
+    return None
+
+
+def get_completed_steps(order_id: int) -> list:
+    """Возвращает список пройденных шагов из таблицы order_progress."""
+    if not order_id:
+        return []
+    progress = get_order_progress(int(order_id))
+    return progress["completed_steps"]
+
+
+def get_current_step(order_id: int) -> str:
+    """Возвращает текущий шаг из таблицы order_progress."""
+    if not order_id:
+        return "order"
+    progress = get_order_progress(int(order_id))
+    return progress["current_step"]
+
 
 # ── Личный кабинет ───────────────────────────────
 
 
 @router.get("/dashboard")
 def dashboard_page(request: Request):
-    from app.auth import get_current_user
     user = get_current_user(request)
     if not user:
         return RedirectResponse("/login", status_code=303)
 
-    from app.database import get_all_orders, get_order_photos, is_order_completed
     is_admin = user["role"] == "admin"
     orders = get_all_orders(user["id"], is_admin)
 
     for order in orders:
         order["is_completed"] = is_order_completed(order["id"])
         order["photos"] = get_order_photos(order["id"])
+        progress = get_order_progress(order["id"])
+        order["current_step"] = progress["current_step"]
+        order["current_step_url"] = STEP_URLS.get(
+            progress["current_step"], "/")
 
     return templates.TemplateResponse("dashboard.html", {
         "request": request,
         "user": user,
         "orders": orders,
     })
+
 
 # ── Главная страница = сразу сканирование ──────────
 
@@ -105,6 +148,7 @@ def scan_page(request: Request):
     order_data = None
     saved_photo = None
     completed_steps = []
+    current_step = "order"
 
     if order_id:
         conn = get_db()
@@ -112,72 +156,75 @@ def scan_page(request: Request):
         cursor.execute("SELECT * FROM orders WHERE id = ?", (int(order_id),))
         row = cursor.fetchone()
         order_data = dict(row) if row else None
+
         if order_data:
-            completed_steps.append("order")
             saved_photo = get_saved_file_path(int(order_id), "order")
-        cursor.execute(
-            "SELECT id FROM gch_data WHERE order_id = ?", (int(order_id),))
-        if cursor.fetchone():
-            completed_steps.append("gch")
-        cursor.execute(
-            "SELECT id FROM g3_data WHERE order_id = ?", (int(order_id),))
-        if cursor.fetchone():
-            completed_steps.append("g3")
-        cursor.execute(
-            "SELECT id FROM pg3_data WHERE order_id = ?", (int(order_id),))
-        if cursor.fetchone():
-            completed_steps.append("pg3")
+
         conn.close()
-        completed_steps = check_visual_completed(order_id, completed_steps)
+
+        # Получаем прогресс из новой таблицы
+        progress = get_order_progress(int(order_id))
+        completed_steps = progress["completed_steps"]
+        current_step = progress["current_step"]
 
     return templates.TemplateResponse("scan.html", {
         "request": request,
-        "current_step": "order",
+        "current_step": current_step,
         "completed_steps": completed_steps,
         "order_id": order_id,
         "order_data": order_data,
         "saved_photo": saved_photo,
-        "user": user,  # ← добавить
+        "user": user,
     })
 
 
 # ── Эндпоинт приёма фото заказа ────────────────────
 @router.post("/api/scan")
-async def api_scan(file: UploadFile = File(...)):
-    upload_dir = "app/static/uploads"
-    os.makedirs(upload_dir, exist_ok=True)
-    file_path = os.path.join(upload_dir, file.filename)
+async def api_scan(request: Request, file: UploadFile = File(...)):
+    user = get_current_user(request)
+    if not user:
+        return JSONResponse(content={"status": "error"}, status_code=401)
 
-    with open(file_path, "wb") as buffer:
+    temp_dir = os.path.join(UPLOAD_ROOT, "temp")
+    os.makedirs(temp_dir, exist_ok=True)
+    temp_name = f"scan_{uuid.uuid4().hex[:8]}.jpg"
+    temp_path = os.path.join(temp_dir, temp_name)
+
+    with open(temp_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
 
-    result = scan_document(file_path)
+    result = scan_document(temp_path)
 
+    order_number = result.get("order_number", "НЕ НАЙДЕНО")
+    product_name = result.get("product_name", "НЕ НАЙДЕНО")
+    department = result.get("department", "НЕ НАЙДЕНО")
+
+    if order_number in ("НЕ НАЙДЕНО", "ОШИБКА API", "", None):
+        os.remove(temp_path)
+        return JSONResponse(content={"status": "error", "message": "❌ Номер заказа не найден!"})
+
+    if product_name in ("НЕ НАЙДЕНО", "ОШИБКА API", "", None):
+        os.remove(temp_path)
+        return JSONResponse(content={"status": "error", "message": "❌ Изделие не найдено!"})
+
+    # Создаём заказ и получаем его ID
     from app.database import get_or_create_order
-    from app.auth import get_current_user
-    user = get_current_user(request)
-    user_id = user["id"] if user else None
-
     order_id = get_or_create_order(
-        result.get("order_number", ""),
-        result.get("product_name", ""),
-        result.get("department", ""),
-        user_id,
-    )
+        order_number, product_name, department, user["id"])
 
-    # Сохраняем файл в папку заказа
-    # Переоткрываем файл для сохранения
-    with open(file_path, "rb") as f:
-        file.file = f
-        saved_path = save_uploaded_file(order_id, "order", file)
+    # Сохраняем фото заказа
+    order_dir = os.path.join(UPLOAD_ROOT, f"order_{order_id}")
+    os.makedirs(order_dir, exist_ok=True)
+    dest_path = os.path.join(order_dir, "order.jpg")
+    shutil.copy2(temp_path, dest_path)
+    os.remove(temp_path)
 
     return JSONResponse(content={
         "status": "ok",
         "order_id": order_id,
-        "order_number": result.get("order_number", "НЕ РАСПОЗНАНО"),
-        "product_name": result.get("product_name", "НЕ РАСПОЗНАНО"),
-        "department": result.get("department", "НЕ РАСПОЗНАНО"),
-        "saved_photo": saved_path,
+        "order_number": order_number,
+        "product_name": product_name,
+        "department": department,
         "confidence": result.get("confidence", 0.0)
     })
 
@@ -205,44 +252,19 @@ async def api_save_order(request: Request):
     return JSONResponse(content={"status": "error", "message": "Нет order_id"}, status_code=400)
 
 
-# ── Вспомогательная функция проверки изделия ────────
-def check_product_match(order_id: str, found_product: str) -> str | None:
-    if not order_id or not found_product:
-        return None
-
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute(
-        "SELECT product_name, order_number FROM orders WHERE id = ?", (int(order_id),))
-    order_row = cursor.fetchone()
-    conn.close()
-
-    if not order_row:
-        return None
-
-    order_product = order_row["product_name"]
-    order_number = order_row["order_number"]
-    order_clean = order_product.upper().replace("-", "").replace(" ", "")
-    found_clean = found_product.upper().replace("-", "").replace(" ", "")
-
-    if found_clean not in order_clean and order_clean not in found_clean:
-        return f"❌ Этот документ от изделия «{found_product}», а заказ №{order_number} на изделие «{order_product}»!"
-
-    return None
-
-
 # ── Страница сканирования ГЧ ──────────────────────
 @router.get("/check-gch")
 def check_gch_page(request: Request):
     user = get_current_user(request)
     if not user:
         return RedirectResponse("/login", status_code=303)
-    order_id = request.query_params.get("order_id", "")
 
+    order_id = request.query_params.get("order_id", "")
     gch_data = None
     order_data = None
     saved_photo = None
-    completed_steps = ["order"]
+    completed_steps = []
+    current_step = "gch"
 
     if order_id:
         conn = get_db()
@@ -257,31 +279,20 @@ def check_gch_page(request: Request):
         gch_data = dict(row) if row else None
 
         if gch_data:
-            completed_steps.append("gch")
             saved_photo = get_saved_file_path(int(order_id), "gch")
 
-        cursor.execute(
-            "SELECT id FROM g3_data WHERE order_id = ?", (int(order_id),))
-        if cursor.fetchone():
-            completed_steps.append("g3")
-
-        cursor.execute(
-            "SELECT id FROM pg3_data WHERE order_id = ?", (int(order_id),))
-        if cursor.fetchone():
-            completed_steps.append("pg3")
-
-        cursor.execute(
-            "SELECT id FROM pg3_data WHERE order_id = ?", (int(order_id),))
-        if cursor.fetchone():
-            completed_steps.append("visual")
-            completed_steps.append("measurements")
         conn.close()
+
+        # Прогресс из таблицы
+        progress = get_order_progress(int(order_id))
+        completed_steps = progress["completed_steps"]
+        current_step = progress["current_step"]
 
     import json
 
     return templates.TemplateResponse("check_gch.html", {
         "request": request,
-        "current_step": "gch",
+        "current_step": current_step,
         "completed_steps": completed_steps,
         "order_id": order_id,
         "order_data": order_data,
@@ -298,10 +309,13 @@ def check_gch_page(request: Request):
 # ── Эндпоинт приёма фото ГЧ ───────────────────────
 @router.post("/api/scan-gch")
 async def api_scan_gch(request: Request, file: UploadFile = File(...)):
+    user = get_current_user(request)
+    if not user:
+        return JSONResponse(content={"status": "error"}, status_code=401)
+
     upload_dir = "app/static/uploads"
     os.makedirs(upload_dir, exist_ok=True)
 
-    import uuid
     safe_name = f"gch_{uuid.uuid4().hex[:8]}.jpg"
     file_path = os.path.join(upload_dir, safe_name)
 
@@ -343,20 +357,23 @@ async def api_scan_gch(request: Request, file: UploadFile = File(...)):
 
     if order_id_str:
         from app.database import save_gch
-        save_gch(int(order_id_str), gch_number, ral, numbers)
-        # Сохраняем файл (переоткрываем для чтения)
-        with open(file_path, "rb") as f:
-            # Копируем в папку заказа
-            order_dir = os.path.join(
-                "app/static/uploads", f"order_{int(order_id_str)}")
-            os.makedirs(order_dir, exist_ok=True)
-            dest_path = os.path.join(order_dir, "gch.jpeg")
-            with open(dest_path, "wb") as dest:
-                shutil.copyfileobj(f, dest)
+        order_id = int(order_id_str)
+        save_gch(order_id, gch_number, ral, numbers)
+
+        # Сохраняем файл
+        order_dir = os.path.join("app/static/uploads", f"order_{order_id}")
+        os.makedirs(order_dir, exist_ok=True)
+        dest_path = os.path.join(order_dir, "gch.jpeg")
+        with open(file_path, "rb") as src, open(dest_path, "wb") as dst:
+            shutil.copyfileobj(src, dst)
 
     return JSONResponse(content={
-        "status": "ok", "gch_number": gch_number, "found_product": found_product,
-        "ral": ral, "numbers": numbers, "count": len(numbers),
+        "status": "ok",
+        "gch_number": gch_number,
+        "found_product": found_product,
+        "ral": ral,
+        "numbers": numbers,
+        "count": len(numbers),
     })
 
 
@@ -369,6 +386,10 @@ async def api_save_gch(request: Request):
         from app.database import save_gch
         save_gch(int(order_id), data.get("gch_number", ""),
                  data.get("ral", ""), data.get("sizes", []))
+
+        # Отмечаем шаг как пройденный и переходим на g3
+        mark_step_completed(int(order_id), "gch", "g3")
+
         return JSONResponse(content={"status": "ok"})
     return JSONResponse(content={"status": "error", "message": "Нет order_id"}, status_code=400)
 
@@ -379,12 +400,13 @@ def check_g3_page(request: Request):
     user = get_current_user(request)
     if not user:
         return RedirectResponse("/login", status_code=303)
-    order_id = request.query_params.get("order_id", "")
 
+    order_id = request.query_params.get("order_id", "")
     g3_data = None
     order_data = None
     saved_photo = None
-    completed_steps = ["order", "gch"]
+    completed_steps = []
+    current_step = "g3"
 
     if order_id:
         conn = get_db()
@@ -393,37 +415,25 @@ def check_g3_page(request: Request):
         row = cursor.fetchone()
         order_data = dict(row) if row else None
 
-        # Проверяем ГЧ (должен быть пройден)
-        cursor.execute(
-            "SELECT id FROM gch_data WHERE order_id = ?", (int(order_id),))
-        if not cursor.fetchone():
-            completed_steps.remove("gch")
-
         cursor.execute(
             "SELECT * FROM g3_data WHERE order_id = ?", (int(order_id),))
         row = cursor.fetchone()
         g3_data = dict(row) if row else None
 
         if g3_data:
-            completed_steps.append("g3")
             saved_photo = get_saved_file_path(int(order_id), "g3")
 
-        cursor.execute(
-            "SELECT id FROM pg3_data WHERE order_id = ?", (int(order_id),))
-        if cursor.fetchone():
-            completed_steps.append("pg3")
-        cursor.execute(
-            "SELECT id FROM pg3_data WHERE order_id = ?", (int(order_id),))
-        if cursor.fetchone():
-            completed_steps.append("visual")
-            completed_steps.append("measurements")
         conn.close()
+
+        progress = get_order_progress(int(order_id))
+        completed_steps = progress["completed_steps"]
+        current_step = progress["current_step"]
 
     import json
 
     return templates.TemplateResponse("check_g3.html", {
         "request": request,
-        "current_step": "g3",
+        "current_step": current_step,
         "completed_steps": completed_steps,
         "order_id": order_id,
         "order_data": order_data,
@@ -439,10 +449,13 @@ def check_g3_page(request: Request):
 # ── Эндпоинт приёма фото Г3 ───────────────────────
 @router.post("/api/scan-g3")
 async def api_scan_g3(request: Request, file: UploadFile = File(...)):
+    user = get_current_user(request)
+    if not user:
+        return JSONResponse(content={"status": "error"}, status_code=401)
+
     upload_dir = "app/static/uploads"
     os.makedirs(upload_dir, exist_ok=True)
 
-    import uuid
     safe_name = f"g3_{uuid.uuid4().hex[:8]}.jpg"
     file_path = os.path.join(upload_dir, safe_name)
 
@@ -480,19 +493,21 @@ async def api_scan_g3(request: Request, file: UploadFile = File(...)):
 
     if order_id_str:
         from app.database import save_g3
-        save_g3(int(order_id_str), g3_number, params)
-        # Сохраняем файл (переоткрываем для чтения)
-        with open(file_path, "rb") as f:
-            order_dir = os.path.join(
-                "app/static/uploads", f"order_{int(order_id_str)}")
-            os.makedirs(order_dir, exist_ok=True)
-            dest_path = os.path.join(order_dir, "g3.jpeg")
-            with open(dest_path, "wb") as dest:
-                shutil.copyfileobj(f, dest)
+        order_id = int(order_id_str)
+        save_g3(order_id, g3_number, params)
+
+        order_dir = os.path.join("app/static/uploads", f"order_{order_id}")
+        os.makedirs(order_dir, exist_ok=True)
+        dest_path = os.path.join(order_dir, "g3.jpeg")
+        with open(file_path, "rb") as src, open(dest_path, "wb") as dst:
+            shutil.copyfileobj(src, dst)
 
     return JSONResponse(content={
-        "status": "ok", "g3_number": g3_number, "found_product": found_product,
-        "params": params, "count": len(params),
+        "status": "ok",
+        "g3_number": g3_number,
+        "found_product": found_product,
+        "params": params,
+        "count": len(params),
     })
 
 
@@ -505,6 +520,9 @@ async def api_save_g3(request: Request):
         from app.database import save_g3
         save_g3(int(order_id), data.get(
             "g3_number", ""), data.get("params", []))
+
+        mark_step_completed(int(order_id), "g3", "pg3")
+
         return JSONResponse(content={"status": "ok"})
     return JSONResponse(content={"status": "error", "message": "Нет order_id"}, status_code=400)
 
@@ -515,12 +533,13 @@ def check_pg3_page(request: Request):
     user = get_current_user(request)
     if not user:
         return RedirectResponse("/login", status_code=303)
-    order_id = request.query_params.get("order_id", "")
 
+    order_id = request.query_params.get("order_id", "")
     pg3_data = None
     order_data = None
     saved_photo = None
-    completed_steps = ["order", "gch", "g3"]
+    completed_steps = []
+    current_step = "pg3"
 
     if order_id:
         conn = get_db()
@@ -529,36 +548,25 @@ def check_pg3_page(request: Request):
         row = cursor.fetchone()
         order_data = dict(row) if row else None
 
-        # Проверяем что предыдущие шаги пройдены
-        cursor.execute(
-            "SELECT id FROM gch_data WHERE order_id = ?", (int(order_id),))
-        if not cursor.fetchone():
-            completed_steps = [s for s in completed_steps if s != "gch"]
-        cursor.execute(
-            "SELECT id FROM g3_data WHERE order_id = ?", (int(order_id),))
-        if not cursor.fetchone():
-            completed_steps = [s for s in completed_steps if s != "g3"]
-
         cursor.execute(
             "SELECT * FROM pg3_data WHERE order_id = ?", (int(order_id),))
         row = cursor.fetchone()
         pg3_data = dict(row) if row else None
-        cursor.execute(
-            "SELECT id FROM pg3_data WHERE order_id = ?", (int(order_id),))
-        if cursor.fetchone():
-            completed_steps.append("visual")
-            completed_steps.append("measurements")
+
         if pg3_data:
-            completed_steps.append("pg3")
             saved_photo = get_saved_file_path(int(order_id), "pg3")
 
         conn.close()
+
+        progress = get_order_progress(int(order_id))
+        completed_steps = progress["completed_steps"]
+        current_step = progress["current_step"]
 
     import json
 
     return templates.TemplateResponse("check_pg3.html", {
         "request": request,
-        "current_step": "pg3",
+        "current_step": current_step,
         "completed_steps": completed_steps,
         "order_id": order_id,
         "order_data": order_data,
@@ -574,10 +582,13 @@ def check_pg3_page(request: Request):
 # ── Эндпоинт приёма фото ПГ3 ──────────────────────
 @router.post("/api/scan-pg3")
 async def api_scan_pg3(request: Request, file: UploadFile = File(...)):
+    user = get_current_user(request)
+    if not user:
+        return JSONResponse(content={"status": "error"}, status_code=401)
+
     upload_dir = "app/static/uploads"
     os.makedirs(upload_dir, exist_ok=True)
 
-    import uuid
     safe_name = f"pg3_{uuid.uuid4().hex[:8]}.jpg"
     file_path = os.path.join(upload_dir, safe_name)
 
@@ -615,18 +626,21 @@ async def api_scan_pg3(request: Request, file: UploadFile = File(...)):
 
     if order_id_str:
         from app.database import save_pg3
-        save_pg3(int(order_id_str), pg3_number, items)
-        with open(file_path, "rb") as f:
-            order_dir = os.path.join(
-                "app/static/uploads", f"order_{int(order_id_str)}")
-            os.makedirs(order_dir, exist_ok=True)
-            dest_path = os.path.join(order_dir, "pg3.jpeg")
-            with open(dest_path, "wb") as dest:
-                shutil.copyfileobj(f, dest)
+        order_id = int(order_id_str)
+        save_pg3(order_id, pg3_number, items)
+
+        order_dir = os.path.join("app/static/uploads", f"order_{order_id}")
+        os.makedirs(order_dir, exist_ok=True)
+        dest_path = os.path.join(order_dir, "pg3.jpeg")
+        with open(file_path, "rb") as src, open(dest_path, "wb") as dst:
+            shutil.copyfileobj(src, dst)
 
     return JSONResponse(content={
-        "status": "ok", "pg3_number": pg3_number, "found_product": found_product,
-        "items": items, "count": len(items),
+        "status": "ok",
+        "pg3_number": pg3_number,
+        "found_product": found_product,
+        "items": items,
+        "count": len(items),
     })
 
 
@@ -639,6 +653,9 @@ async def api_save_pg3(request: Request):
         from app.database import save_pg3
         save_pg3(int(order_id), data.get(
             "pg3_number", ""), data.get("items", []))
+
+        mark_step_completed(int(order_id), "pg3", "visual")
+
         return JSONResponse(content={"status": "ok"})
     return JSONResponse(content={"status": "error", "message": "Нет order_id"}, status_code=400)
 
@@ -649,9 +666,49 @@ async def api_save_visual(request: Request):
     data = await request.json()
     order_id = data.get("order_id")
     if order_id:
-        from app.database import save_visual_results
+        from app.database import save_visual_results, mark_step_completed
         save_visual_results(int(order_id), data)
-        return JSONResponse(content={"status": "ok"})
+        
+        # Проверяем, ВСЕ ли обязательные поля заполнены
+        all_filled = True
+        
+        # 1. Соответствие ГЧ
+        if not data.get("gch_match"):
+            all_filled = False
+        
+        # 2. Все размеры заполнены
+        sizes = data.get("sizes", [])
+        if not sizes or any(not s or int(s) <= 0 for s in sizes):
+            all_filled = False
+        
+        # 3. RAL заполнен
+        if not data.get("ral"):
+            all_filled = False
+        
+        # 4. Масса заполнена
+        if not data.get("mass"):
+            all_filled = False
+        
+        # 5. Все проверки Г3 выбраны
+        g3_checks = data.get("g3_checks", [])
+        if not g3_checks or any(not c.get("value") for c in g3_checks):
+            all_filled = False
+        
+        # 6. Все параметры Г3 заполнены
+        g3_values = data.get("g3_values", [])
+        if not g3_values or any(not v.get("value") for v in g3_values):
+            all_filled = False
+        
+        # 7. Все позиции ПГ3 подтверждены
+        pg3_confirmed = data.get("pg3_confirmed", [])
+        if not pg3_confirmed or any(not c.get("confirmed") for c in pg3_confirmed):
+            all_filled = False
+        
+        # Только если ВСЁ заполнено — отмечаем шаг пройденным
+        if all_filled:
+            mark_step_completed(int(order_id), "visual", "measurements")
+        
+        return JSONResponse(content={"status": "ok", "all_filled": all_filled})
     return JSONResponse(content={"status": "error", "message": "Нет order_id"}, status_code=400)
 
 
@@ -661,26 +718,56 @@ async def api_save_measurements(request: Request):
     data = await request.json()
     order_id = data.get("order_id")
     if order_id:
-        from app.database import save_measurement_results
+        from app.database import save_measurement_results, mark_step_completed
         save_measurement_results(int(order_id), data)
-        return JSONResponse(content={"status": "ok"})
+        
+        # Проверяем, ВСЕ ли обязательные поля заполнены
+        all_filled = True
+        
+        # 1. Все параметры Г3 заполнены
+        g3_values = data.get("g3_values", [])
+        if not g3_values or any(not v.get("value") for v in g3_values):
+            all_filled = False
+        
+        # 2. Все токи заполнены
+        currents = data.get("currents", [])
+        if not currents or len(currents) < 6 or any(not c.get("value") for c in currents):
+            all_filled = False
+        
+        # 3. Номинальный ток заполнен
+        if not data.get("nominal_current"):
+            all_filled = False
+        
+        # 4. Шум заполнен
+        if not data.get("noise_idle") or not data.get("noise_load"):
+            all_filled = False
+        
+        # 5. Рабочая жидкость выбрана
+        if not data.get("fluid"):
+            all_filled = False
+        
+        # Только если ВСЁ заполнено — отмечаем шаг пройденным
+        if all_filled:
+            mark_step_completed(int(order_id), "measurements", "protocol")
+        
+        return JSONResponse(content={"status": "ok", "all_filled": all_filled})
     return JSONResponse(content={"status": "error", "message": "Нет order_id"}, status_code=400)
 
+
 # ── Страница визуального контроля ──────────────────
-
-
 @router.get("/visual-check")
 def visual_check_page(request: Request):
     user = get_current_user(request)
     if not user:
         return RedirectResponse("/login", status_code=303)
-    order_id = request.query_params.get("order_id", None)
 
+    order_id = request.query_params.get("order_id", None)
     gch_data = None
     g3_data = None
     pg3_data = None
     order_data = None
-    completed_steps = ["order", "gch", "g3", "pg3"]
+    completed_steps = []
+    current_step = "visual"
 
     if order_id:
         conn = get_db()
@@ -705,26 +792,17 @@ def visual_check_page(request: Request):
         row = cursor.fetchone()
         pg3_data = dict(row) if row else None
 
-        # Проверяем реально пройденные шаги
-        if not gch_data:
-            completed_steps = [s for s in completed_steps if s != "gch"]
-        if not g3_data:
-            completed_steps = [s for s in completed_steps if s != "g3"]
-        if not pg3_data:
-            completed_steps = [s for s in completed_steps if s != "pg3"]
-
-        # Визуальный контроль доступен если есть ПГ3
-        if pg3_data:
-            completed_steps.append("visual")
-            completed_steps.append("measurements")
-
         conn.close()
+
+        progress = get_order_progress(int(order_id))
+        completed_steps = progress["completed_steps"]
+        current_step = progress["current_step"]
 
     import json
 
     return templates.TemplateResponse("visual_check.html", {
         "request": request,
-        "current_step": "visual",
+        "current_step": current_step,
         "completed_steps": completed_steps,
         "order_id": order_id,
         "order": order_data,
@@ -736,19 +814,20 @@ def visual_check_page(request: Request):
         "user": user,
     })
 
-# ── Страница испытаний ────────────────────────────
 
-
+# ── Страница измерений ────────────────────────────
+# ── Страница измерений ────────────────────────────
 @router.get("/measurements")
 def measurements_page(request: Request):
     user = get_current_user(request)
     if not user:
         return RedirectResponse("/login", status_code=303)
-    order_id = request.query_params.get("order_id", None)
 
+    order_id = request.query_params.get("order_id", None)
     order_data = None
     g3_data = None
-    completed_steps = ["order", "gch", "g3", "pg3", "visual"]
+    completed_steps = []
+    current_step = "measurements"
 
     if order_id:
         conn = get_db()
@@ -758,33 +837,27 @@ def measurements_page(request: Request):
         row = cursor.fetchone()
         order_data = dict(row) if row else None
 
-        cursor.execute(
-            "SELECT * FROM g3_data WHERE order_id = ?", (int(order_id),))
+        cursor.execute("SELECT * FROM g3_data WHERE order_id = ?", (int(order_id),))
         row = cursor.fetchone()
         g3_data = dict(row) if row else None
 
-        # Проверяем реально пройденные шаги
-        if not g3_data:
-            completed_steps = [s for s in completed_steps if s != "g3"]
-
-        if g3_data:
-            completed_steps.append("measurements")
-
         conn.close()
+
+        progress = get_order_progress(int(order_id))
+        completed_steps = progress["completed_steps"]
+        current_step = progress["current_step"]
 
     import json
 
     return templates.TemplateResponse("measurements.html", {
         "request": request,
-        "current_step": "measurements",
+        "current_step": current_step,
         "completed_steps": completed_steps,
         "order_id": order_id,
         "order": order_data,
         "g3_params": json.loads(g3_data.get("params", "[]")) if g3_data else [],
         "user": user,
     })
-
-
 # ── Загрузка визуального контроля ──────────────────
 @router.get("/api/get-visual")
 def api_get_visual(request: Request):
@@ -795,9 +868,8 @@ def api_get_visual(request: Request):
         return JSONResponse(content={"status": "ok", "data": data})
     return JSONResponse(content={"status": "error", "message": "Нет order_id"}, status_code=400)
 
+
 # ── Загрузка измерений ──────────────────────────────
-
-
 @router.get("/api/get-measurements")
 def api_get_measurements(request: Request):
     order_id = request.query_params.get("order_id", None)
@@ -808,15 +880,18 @@ def api_get_measurements(request: Request):
     return JSONResponse(content={"status": "error", "message": "Нет order_id"}, status_code=400)
 
 # ── Страница фотографирования ─────────────────────
-
-
 @router.get("/photo")
 def photo_page(request: Request):
     user = get_current_user(request)
     if not user:
         return RedirectResponse("/login", status_code=303)
+
     order_id = request.query_params.get("order_id", None)
     order_data = None
+    completed_steps = []
+    current_step = "photo"
+    photos = []
+
     if order_id:
         conn = get_db()
         cursor = conn.cursor()
@@ -825,30 +900,37 @@ def photo_page(request: Request):
         order_data = dict(row) if row else None
         conn.close()
 
+        progress = get_order_progress(int(order_id))
+        completed_steps = progress["completed_steps"]
+        current_step = progress["current_step"]
+
+        # Получаем уже загруженные фото
+        photos = get_order_photos(int(order_id))
+        photos_done = len(photos) >= 4
+
+        # Если фото уже загружены — фото пройден, текущий шаг — протокол
+        if photos_done:
+            if "photo" not in completed_steps:
+                completed_steps.append("photo")
+            update_order_step(int(order_id), "protocol", completed_steps)
+            current_step = "protocol"
+        else:
+            # Фото ещё не загружены — фото текущий шаг
+            # Протокол должен быть в completed_steps (если он был пройден)
+            if "protocol" not in completed_steps and "measurements" in completed_steps:
+                completed_steps.append("protocol")
+            update_order_step(int(order_id), "photo", completed_steps)
+            current_step = "photo"
+
     return templates.TemplateResponse("photo.html", {
         "request": request,
-        "current_step": "photo",
-        "completed_steps": ["order", "gch", "g3", "pg3", "visual", "measurements", "protocol", "photo"],
+        "current_step": current_step,
+        "completed_steps": completed_steps,
         "order_id": order_id,
         "order": order_data,
+        "photos": photos,
         "user": user,
     })
-
-
-# ── Эндпоинт сохранения фото изделия ─────────────
-@router.post("/api/save-photo")
-async def api_save_photo(request: Request):
-    data = await request.json()
-    order_id = data.get("order_id")
-    photo_index = data.get("photo_index")  # 1, 2, 3, 4
-
-    if not order_id or not photo_index:
-        return JSONResponse(content={"status": "error"}, status_code=400)
-
-    # Здесь будет сохранение файла, если мы передаём base64
-    # Пока просто возвращаем OK
-
-    return JSONResponse(content={"status": "ok", "photo_index": photo_index})
 
 
 # ── Эндпоинт загрузки фото изделия ───────────────
@@ -867,6 +949,12 @@ async def api_upload_photo(request: Request, file: UploadFile = File(...)):
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
 
+    # Если загружено 4+ фото — отмечаем шаг photo как пройденный
+    from app.database import get_order_photos, mark_step_completed
+    photos = get_order_photos(int(order_id))
+    if len(photos) >= 4:
+        mark_step_completed(int(order_id), "photo", "protocol")
+
     return JSONResponse(content={
         "status": "ok",
         "photo_index": photo_index,
@@ -879,11 +967,13 @@ async def api_upload_photo(request: Request, file: UploadFile = File(...)):
 def protocol_page(request: Request):
     import json
     import re
+    from datetime import datetime
+
     user = get_current_user(request)
     if not user:
         return RedirectResponse("/login", status_code=303)
-    order_id = request.query_params.get("order_id", None)
 
+    order_id = request.query_params.get("order_id", None)
     order_data = None
     visual_data = None
     measurement_data = None
@@ -892,6 +982,8 @@ def protocol_page(request: Request):
     g3_params = []
     test_date = ""
     serial_number = ""
+    completed_steps = []
+    current_step = "protocol"
 
     if order_id:
         conn = get_db()
@@ -902,7 +994,6 @@ def protocol_page(request: Request):
         order_data = dict(row) if row else None
 
         if order_data:
-            from datetime import datetime
             test_date = datetime.now().strftime("%d.%m.%Y")
 
             order_num = order_data.get("order_number", "")
@@ -915,7 +1006,6 @@ def protocol_page(request: Request):
             date_part = datetime.now().strftime("%d%m%y")
             serial_number = f"{first_digits}{date_part}01"
 
-        from app.database import get_measurement_results, get_visual_results
         visual_data = get_visual_results(int(order_id))
         measurement_data = get_measurement_results(int(order_id))
 
@@ -933,10 +1023,36 @@ def protocol_page(request: Request):
 
         conn.close()
 
+        progress = get_order_progress(int(order_id))
+        completed_steps = progress["completed_steps"]
+        current_step = progress["current_step"]
+
+        # Проверяем, есть ли уже фото
+        photos = get_order_photos(int(order_id))
+        photos_done = len(photos) >= 4
+
+        # Если фото ещё не загружены — протокол текущий шаг
+        if not photos_done:
+            # Если протокол ещё не в completed_steps — добавляем
+            if "protocol" not in completed_steps:
+                completed_steps.append("protocol")
+                update_order_step(int(order_id), "photo", completed_steps)
+            else:
+                update_order_step(int(order_id), "photo")
+            current_step = "photo"
+        # Если фото уже загружены — фото пройден, протокол текущий
+        else:
+            if "photo" not in completed_steps:
+                completed_steps.append("photo")
+            if "protocol" in completed_steps:
+                completed_steps.remove("protocol")
+            update_order_step(int(order_id), "protocol", completed_steps)
+            current_step = "protocol"
+
     return templates.TemplateResponse("protocol.html", {
         "request": request,
-        "current_step": "protocol",
-        "completed_steps": ["order", "gch", "g3", "pg3", "visual", "measurements", "protocol"],
+        "current_step": current_step,
+        "completed_steps": completed_steps,
         "order_id": order_id,
         "order": order_data,
         "visual": visual_data,
@@ -949,9 +1065,8 @@ def protocol_page(request: Request):
         "user": user,
     })
 
+
 # ── Логин ────────────────────────────────────────
-
-
 @router.get("/login")
 def login_page(request: Request, error: str = ""):
     user = get_current_user(request)
@@ -978,3 +1093,4 @@ async def login(request: Request):
 def logout(request: Request):
     request.session.clear()
     return RedirectResponse("/login", status_code=303)
+

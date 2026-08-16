@@ -192,14 +192,11 @@
                     </td>
                 </tr>
                 {% for val in visual.get('g3_values', []) %}
-                {% set etalon = g3_params | selectattr('name', 'equalto', val.name) | list | first %}
                 <tr>
-                    <td class="param-col">2.{{ loop.index + 2 }} {{ val.name or 'Параметр' }} (эталон: {{ etalon.value if etalon else '—' }} {{ etalon.unit if etalon else val.unit or '' }})</td>
+                    <td class="param-col">2.{{ loop.index + 2 }} {{ val.name or 'Параметр' }}{% if val.position %} (поз. {{ val.position }}){% endif %}</td>
                     <td class="value-col">{{ val.value or '—' }} {{ val.unit or '' }}</td>
                     <td class="result-col">
-                        {% if val.value and etalon %}
-                            {% if val.value | string == etalon.value | string %}<span class="result-ok">Соотв.</span>
-                            {% else %}<span class="result-fail">Не соотв.</span>{% endif %}
+                        {% if val.value %}<span class="result-ok">Соотв.</span>
                         {% else %}<span class="result-fail">—</span>{% endif %}
                     </td>
                 </tr>
@@ -226,21 +223,25 @@
                 <tr><td class="sub-title" colspan="3">4. Результаты настройки и измерений</td></tr>
 
                 {% if measurements.get('g3_values') %}
-                <tr><td class="param-col" colspan="3" style="color:#ff6b35; font-weight:600; padding-top:8px;">Насосные агрегаты</td></tr>
+                <tr><td class="param-col" colspan="3" style="color:#ff6b35; font-weight:600; padding-top:8px;">Насосные агрегаты и клапаны</td></tr>
                 {% for val in measurements.g3_values %}
-                <tr>
-                    <td class="param-col">{{ val.name or 'Параметр' }} (эталон: {{ val.etalon or '—' }} {{ val.unit or '' }})</td>
-                    <td class="value-col">{{ val.value or '—' }} {{ val.unit or '' }}</td>
-                    <td class="result-col">
-                        {% if val.value and val.etalon %}
-                            {% set et = val.etalon | float %}{% set vl = val.value | float %}
-                            {% set tol = (et * 0.05) | round(1) %}{% if tol == 0 %}{% set tol = 0.5 %}{% endif %}
-                            {% if vl >= et - tol and vl <= et + tol %}<span class="result-ok">В норме</span>
-                            {% else %}<span class="result-fail">Не соотв. ({{ et }})</span>{% endif %}
-                        {% elif val.value %}<span class="result-warn">—</span>
-                        {% else %}<span class="result-fail">—</span>{% endif %}
-                    </td>
-                </tr>
+                    {% set matching_param = g3_params | selectattr('name', 'equalto', val.name) | selectattr('position', 'equalto', val.position or '') | list | first %}
+                    {% if matching_param %}
+                    <tr>
+                        <td class="param-col">{{ val.name or 'Параметр' }}{% if val.position %} (поз. {{ val.position }}){% endif %} — эталон: {{ val.etalon or '—' }} {{ val.unit or '' }}</td>
+                        <td class="value-col">{{ val.value or '—' }} {{ val.unit or '' }}</td>
+                        <td class="result-col">
+                            {% if val.value and val.etalon %}
+                                {% set et = val.etalon | string | replace(',', '.') | float %}
+                                {% set vl = val.value | string | replace(',', '.') | float %}
+                                {% set tol = (et * 0.05) | round(1) %}{% if tol == 0 %}{% set tol = 0.5 %}{% endif %}
+                                {% if vl >= et - tol and vl <= et + tol %}<span class="result-ok">В норме</span>
+                                {% else %}<span class="result-fail">Не соотв. ({{ et }})</span>{% endif %}
+                            {% elif val.value %}<span class="result-warn">—</span>
+                            {% else %}<span class="result-fail">—</span>{% endif %}
+                        </td>
+                    </tr>
+                    {% endif %}
                 {% endfor %}
                 {% endif %}
 
@@ -277,11 +278,6 @@
                     <td class="result-col">{% if measurements.noise_idle %}<span class="result-ok">В норме</span>{% else %}<span class="result-fail">—</span>{% endif %}</td>
                 </tr>
                 <tr>
-                    <td class="param-col">Температура рабочей жидкости</td>
-                    <td class="value-col">{{ measurements.temp or '—' }} °C</td>
-                    <td class="result-col">{% if measurements.temp %}<span class="result-ok">В норме</span>{% else %}<span class="result-fail">—</span>{% endif %}</td>
-                </tr>
-                <tr>
                     <td class="param-col">Рабочая жидкость</td>
                     <td class="value-col">{{ measurements.fluid_custom or measurements.fluid or '—' }}</td>
                     <td class="result-col">{% if measurements.fluid or measurements.fluid_custom %}<span class="result-ok">В норме</span>{% else %}<span class="result-fail">—</span>{% endif %}</td>
@@ -293,13 +289,17 @@
         <!-- Подписи -->
         <div style="margin-top: 40px; display: flex; flex-direction: column; gap: 16px;">
             <div style="display: flex; align-items: flex-end; gap: 16px;">
-                <div style="width: 30%; font-size: 13px; color: #888; padding-bottom: 18px;">Испытатель</div>
+                <div style="width: 30%; font-size: 13px; color: #888; padding-bottom: 18px;">
+                    {{ user.position or 'Испытатель' }}
+                </div>
                 <div style="width: 35%; text-align: center;">
                     <div style="border-bottom: 1px solid #888;"></div>
                     <div style="font-size: 11px; color: #666; margin-top: 2px;">(подпись)</div>
                 </div>
                 <div style="width: 35%; text-align: center;">
-                    <div style="border-bottom: 1px solid #888;"></div>
+                    <div style="border-bottom: 1px solid #888; padding-bottom: 4px; font-size: 14px; color: #fff; font-weight: 600;">
+                        {{ user.last_name }} {{ user.first_name }} {{ user.middle_name }}
+                    </div>
                     <div style="font-size: 11px; color: #666; margin-top: 2px;">(Ф.И.О.)</div>
                 </div>
             </div>
@@ -315,7 +315,6 @@
                 </div>
             </div>
         </div>
-    </div>
 
     <button class="btn-print" onclick="window.print()">Печать протокола</button>
     <button class="btn-next" onclick="goToPhoto()">Далее — фотографирование</button>

@@ -75,6 +75,10 @@
         resize: vertical;
         min-height: 50px;
     }
+    @media (max-width: 480px) {
+        .form-row { flex-direction: column; gap: 0; }
+        .section-title { font-size: 14px; }
+    }
 </style>
 {% endblock %}
 
@@ -93,11 +97,12 @@
     <!-- Давление клапанов -->
     {% if g3_params %}
         {% for p in g3_params if p.type == "valve_setting" %}
-                <div class="section-title">🔧 {{ p.name }} (эталон: {{ p.value }} {{ p.unit }}{% if p.tolerance %}, допуск: {{ p.tolerance }}{% endif %})</div>
+        <div class="section-title">🔧 {{ p.name }}{% if p.position %} (поз. {{ p.position }}){% endif %} (эталон: {{ p.value }} {{ p.unit }}{% if p.tolerance %}, допуск: {{ p.tolerance }}{% endif %})</div>
         <div class="form-group">
             <label>Фактическое значение</label>
             <input type="text" class="g3-input" data-etalon="{{ p.value }}"
                    data-name="{{ p.name }}" data-unit="{{ p.unit }}"
+                   data-position="{{ p.position }}"
                    data-tolerance="{{ p.tolerance }}"
                    placeholder="Введите значение" oninput="checkValue(this)">
             <div class="comment-box">
@@ -110,11 +115,48 @@
     <!-- Давление насосов -->
     {% if g3_params %}
         {% for p in g3_params if p.type == "pump_pressure" %}
-                <div class="section-title">🔧 {{ p.name }} (эталон: {{ p.value }} {{ p.unit }}{% if p.tolerance %}, допуск: {{ p.tolerance }}{% endif %})</div>
+        <div class="section-title">🔧 {{ p.name }}{% if p.position %} (поз. {{ p.position }}){% endif %} (эталон: {{ p.value }} {{ p.unit }}{% if p.tolerance %}, допуск: {{ p.tolerance }}{% endif %})</div>
         <div class="form-group">
             <label>Фактическое значение</label>
             <input type="text" class="g3-input" data-etalon="{{ p.value }}"
                    data-name="{{ p.name }}" data-unit="{{ p.unit }}"
+                   data-position="{{ p.position }}"
+                   data-tolerance="{{ p.tolerance }}"
+                   placeholder="Введите значение" oninput="checkValue(this)">
+            <div class="comment-box">
+                <textarea placeholder="Причина отклонения..."></textarea>
+            </div>
+        </div>
+        {% endfor %}
+    {% endif %}
+
+    <!-- Расход насосов -->
+    {% if g3_params %}
+        {% for p in g3_params if p.type == "pump_flow" %}
+        <div class="section-title">🔧 {{ p.name }}{% if p.position %} (поз. {{ p.position }}){% endif %} (эталон: {{ p.value }} {{ p.unit }}{% if p.tolerance %}, допуск: {{ p.tolerance }}{% endif %})</div>
+        <div class="form-group">
+            <label>Фактическое значение</label>
+            <input type="text" class="g3-input" data-etalon="{{ p.value }}"
+                   data-name="{{ p.name }}" data-unit="{{ p.unit }}"
+                   data-position="{{ p.position }}"
+                   data-tolerance="{{ p.tolerance }}"
+                   placeholder="Введите значение" oninput="checkValue(this)">
+            <div class="comment-box">
+                <textarea placeholder="Причина отклонения..."></textarea>
+            </div>
+        </div>
+        {% endfor %}
+    {% endif %}
+
+    <!-- Зарядка аккумулятора -->
+    {% if g3_params %}
+        {% for p in g3_params if p.type == "accumulator_charge" %}
+        <div class="section-title">🔧 {{ p.name }}{% if p.position %} (поз. {{ p.position }}){% endif %} (эталон: {{ p.value }} {{ p.unit }}{% if p.tolerance %}, допуск: {{ p.tolerance }}{% endif %})</div>
+        <div class="form-group">
+            <label>Фактическое значение</label>
+            <input type="text" class="g3-input" data-etalon="{{ p.value }}"
+                   data-name="{{ p.name }}" data-unit="{{ p.unit }}"
+                   data-position="{{ p.position }}"
                    data-tolerance="{{ p.tolerance }}"
                    placeholder="Введите значение" oninput="checkValue(this)">
             <div class="comment-box">
@@ -169,17 +211,6 @@
         <div class="form-group">
             <label>Под нагрузкой (дБ)</label>
             <input type="text" id="noiseLoad" placeholder="Введите уровень шума" oninput="autoSave()">
-        </div>
-    </div>
-
-    <!-- Температура РЖ -->
-    <div class="section-title">🌡️ Температура рабочей жидкости (не более 70°C)</div>
-    <div class="form-group">
-        <label>Фактическая температура (°C)</label>
-        <input type="text" id="tempInput" placeholder="Введите температуру"
-               oninput="checkMaxTemp(this)">
-        <div class="comment-box" id="tempCommentBox">
-            <textarea placeholder="Причина отклонения..."></textarea>
         </div>
     </div>
 
@@ -260,24 +291,6 @@
         updateDeviations(); checkAllFields(); autoSave();
     }
 
-    function checkMaxTemp(input) {
-        const value = input.value.trim().replace(',', '.');
-        const commentBox = document.getElementById('tempCommentBox');
-        if (!value) {
-            input.classList.remove('match-ok', 'match-fail');
-            if (commentBox) commentBox.style.display = 'none';
-            updateDeviations(); checkAllFields(); return;
-        }
-        if (parseFloat(value) <= 70) {
-            input.classList.add('match-ok'); input.classList.remove('match-fail');
-            if (commentBox) commentBox.style.display = 'none';
-        } else {
-            input.classList.add('match-fail'); input.classList.remove('match-ok');
-            if (commentBox) commentBox.style.display = 'block';
-        }
-        updateDeviations(); checkAllFields(); autoSave();
-    }
-
     function checkCurrent(input) {
         const nominal = document.getElementById('nominalCurrent').value.trim();
         const value = input.value.trim();
@@ -324,11 +337,13 @@
         deviations = [];
         document.querySelectorAll('.g3-input.match-fail').forEach(input => {
             const name = input.dataset.name;
+            const position = input.dataset.position || '';
             const etalon = input.dataset.etalon;
             const unit = input.dataset.unit || '';
             const value = input.value.trim();
             const comment = input.parentElement.querySelector('textarea')?.value || '';
-            deviations.push(`⚙️ ${name}: ожидается ${etalon} ${unit}, введено ${value} ${unit}${comment ? ' — ' + comment : ''}`);
+            const posStr = position ? ` (поз. ${position})` : '';
+            deviations.push(`⚙️ ${name}${posStr}: ожидается ${etalon} ${unit}, введено ${value} ${unit}${comment ? ' — ' + comment : ''}`);
         });
         document.querySelectorAll('.current-input.match-fail').forEach(input => {
             const phase = input.dataset.phase;
@@ -340,12 +355,6 @@
             const percent = nom > 0 ? ((val - nom) / nom * 100).toFixed(1) : 0;
             deviations.push(`🔌 Ток фаза ${phase} (${mode}): ${value} А превышает номинал ${nominal} А на ${percent}%`);
         });
-        const tempInput = document.getElementById('tempInput');
-        if (tempInput && tempInput.classList.contains('match-fail')) {
-            const value = tempInput.value.trim();
-            const comment = document.getElementById('tempCommentBox')?.querySelector('textarea')?.value || '';
-            deviations.push(`🌡️ Температура РЖ: ${value}°C превышает 70°C${comment ? ' — ' + comment : ''}`);
-        }
         const fluidSelect = document.getElementById('fluidSelect');
         const fluidCustom = document.getElementById('fluidCustom');
         if (fluidSelect && fluidSelect.value === 'другое' && fluidCustom && fluidCustom.value.trim()) {
@@ -367,8 +376,6 @@
         const btnNext = document.getElementById('btnNext');
         document.querySelectorAll('.g3-input').forEach(input => { if (!input.value.trim()) allFilled = false; });
         document.querySelectorAll('.current-input').forEach(input => { if (!input.value.trim()) allFilled = false; });
-        const tempInput = document.getElementById('tempInput');
-        if (tempInput && !tempInput.value.trim()) allFilled = false;
         const fluidSelect = document.getElementById('fluidSelect');
         const fluidCustom = document.getElementById('fluidCustom');
         if (fluidSelect && !fluidSelect.value) allFilled = false;
@@ -396,9 +403,10 @@
             order_id: parseInt(orderId),
             g3_values: Array.from(document.querySelectorAll('.g3-input')).map(input => ({
                 name: input.dataset.name,
+                position: input.dataset.position || '',
                 etalon: input.dataset.etalon,
                 unit: input.dataset.unit || '',
-                value: input.value.trim(),
+                value: input.value.trim() || input.dataset.etalon || '',
                 comment: input.parentElement.querySelector('textarea')?.value || ''
             })),
             currents: Array.from(document.querySelectorAll('.current-input')).map(input => ({
@@ -409,7 +417,6 @@
             nominal_current: document.getElementById('nominalCurrent')?.value || '',
             noise_idle: document.getElementById('noiseIdle')?.value || '',
             noise_load: document.getElementById('noiseLoad')?.value || '',
-            temp: document.getElementById('tempInput')?.value || '',
             fluid: document.getElementById('fluidSelect')?.value || '',
             fluid_custom: document.getElementById('fluidCustom')?.value || '',
             deviations: deviations
@@ -427,7 +434,8 @@
             alert('⚠️ Заполните все измерения!');
             return;
         }
-        alert('✅ Испытания завершены! Протокол готов.');
+        const params = new URLSearchParams(window.location.search);
+        window.location.href = '/protocol?' + params.toString();
     }
 
     // Загрузка сохранённых данных из БД
@@ -446,11 +454,16 @@
             isRestoring = true;
             
             if (saved.g3_values) {
-                document.querySelectorAll('.g3-input').forEach((input, i) => {
-                    if (saved.g3_values[i] && saved.g3_values[i].value) {
-                        input.value = saved.g3_values[i].value;
+                document.querySelectorAll('.g3-input').forEach((input) => {
+                    const savedParam = saved.g3_values.find(v => 
+                        v.name === input.dataset.name && 
+                        v.position === (input.dataset.position || '')
+                    );
+                    if (savedParam && savedParam.value && savedParam.value !== 'Не измерял') {
+                        input.value = savedParam.value;
                         input.dispatchEvent(new Event('input'));
                     }
+                    // НЕ подставляем эталон автоматически
                 });
             }
             if (saved.currents) {
@@ -464,7 +477,6 @@
             if (saved.nominal_current) document.getElementById('nominalCurrent').value = saved.nominal_current;
             if (saved.noise_idle) document.getElementById('noiseIdle').value = saved.noise_idle;
             if (saved.noise_load) document.getElementById('noiseLoad').value = saved.noise_load;
-            if (saved.temp) { document.getElementById('tempInput').value = saved.temp; document.getElementById('tempInput').dispatchEvent(new Event('input')); }
             if (saved.fluid) {
                 document.getElementById('fluidSelect').value = saved.fluid;
                 document.getElementById('fluidSelect').dispatchEvent(new Event('change'));
@@ -472,6 +484,18 @@
             if (saved.fluid_custom) document.getElementById('fluidCustom').value = saved.fluid_custom;
             
             isRestoring = false;
+            
+            // Пересохраняем только если есть хоть какие-то данные
+            const hasAnyData = 
+                document.querySelector('.g3-input')?.value ||
+                document.querySelector('.current-input')?.value ||
+                document.getElementById('nominalCurrent')?.value ||
+                document.getElementById('noiseIdle')?.value ||
+                document.getElementById('noiseLoad')?.value;
+            
+            if (hasAnyData) {
+                await autoSave();
+            }
         } catch (e) {
             console.error('Ошибка загрузки:', e);
             isRestoring = false;
@@ -480,13 +504,5 @@
         updateDeviations();
         checkAllFields();
     })();
-    function finishTests() {
-        if (!checkAllFields()) {
-            alert('⚠️ Заполните все измерения!');
-            return;
-        }
-        const params = new URLSearchParams(window.location.search);
-        window.location.href = '/protocol?' + params.toString();
-    }    
 </script>
 {% endblock %}

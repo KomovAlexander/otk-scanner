@@ -166,6 +166,8 @@
             font-size: 13px;
             font-weight: 600;
             text-decoration: none;
+            cursor: pointer;
+            transition: all 0.2s;
         }
         .progress-step.active {
             background: #ff6b35;
@@ -175,9 +177,14 @@
             background: #1e3a1e;
             color: #4caf50;
         }
+        .progress-step.done:hover {
+            background: #2a5a2a;
+            color: #fff;
+        }
         .progress-step.future {
             background: #2a2d35;
             color: #666;
+            cursor: not-allowed;
         }
         .top-bar {
             background: #14161a;
@@ -215,6 +222,10 @@
         }
         .role-admin { background: #ff6b35; color: #fff; }
         .role-tester { background: #4caf50; color: #fff; }
+        .progress-step.active:hover {
+            background: #e55a2b;
+            color: #fff;
+        }        
         @media (max-width: 480px) {
             .page-header h1 { font-size: 20px; }
             .capture-zone { padding: 20px 14px; }
@@ -271,15 +282,19 @@
         "photo": "/photo",
         "protocol": "/protocol"
     } %}
-    
+
     {% if current_step %}
     <div class="progress-bar">
         {% for key in step_order %}
             {% if key == current_step %}
-                <span class="progress-step active">{{ step_names[key] }}</span>
+                <!-- Текущий шаг — кликабельная ссылка (для возврата с пройденных шагов) -->
+                <a href="{{ step_urls[key] }}{% if order_id %}?order_id={{ order_id }}{% endif %}" 
+                class="progress-step active">
+                    {{ step_names[key] }}
+                </a>
             {% elif key in completed_steps %}
                 <a href="{{ step_urls[key] }}{% if order_id %}?order_id={{ order_id }}{% endif %}" 
-                   class="progress-step done leave-check">
+                class="progress-step done">
                     ✅ {{ step_names[key].split(' ', 1)[1] }}
                 </a>
             {% else %}
@@ -291,36 +306,5 @@
 
     {% block content %}{% endblock %}
     {% block extra_js %}{% endblock %}
-    <script>
-        document.querySelectorAll('.leave-check').forEach(link => {
-            link.addEventListener('click', function(e) {
-                const btnNext = document.getElementById('btnNext');
-                if (btnNext && btnNext.disabled) {
-                    const stepOrder = ["order", "gch", "g3", "pg3", "visual", "measurements"];
-                    const currentKey = "{{ current_step }}";
-                    const href = this.getAttribute('href');
-                    
-                    // Определяем ключ шага по URL
-                    let targetKey = null;
-                    for (const [key, url] of Object.entries({
-                        "order": "/", "gch": "/check-gch", "g3": "/check-g3",
-                        "pg3": "/check-pg3", "visual": "/visual-check", "measurements": "/measurements"
-                    })) {
-                        if (href.includes(url) && url !== '/') { targetKey = key; break; }
-                        if (url === '/' && href === '/' || href.startsWith('/?order_id=')) { targetKey = 'order'; break; }
-                    }
-                    
-                    const currentIndex = stepOrder.indexOf(currentKey);
-                    const targetIndex = stepOrder.indexOf(targetKey);
-                    
-                    // Блокируем только если идём вперёд
-                    if (targetIndex > currentIndex) {
-                        e.preventDefault();
-                        alert('⚠️ Заполните все обязательные поля перед переходом вперёд!');
-                    }
-                }
-            });
-        });
-    </script> 
 </body>
 </html>

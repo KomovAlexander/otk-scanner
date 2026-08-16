@@ -612,10 +612,10 @@
                 value: input.value.trim(),
                 comment: input.parentElement.querySelector('textarea')?.value || ''
             })),
-            pg3_confirmed: pg3Changed ? Array.from(document.querySelectorAll('.pg3-checkbox')).map(cb => ({
+            pg3_confirmed: Array.from(document.querySelectorAll('.pg3-checkbox')).map(cb => ({
                 position: cb.dataset.position,
                 confirmed: cb.checked
-            })) : undefined,
+            })),
             deviations: deviations
         };
 
@@ -735,7 +735,10 @@
             }
             if (saved.sizes) {
                 document.querySelectorAll('.size-input').forEach((input, i) => {
-                    if (saved.sizes[i]) { input.value = saved.sizes[i]; input.dispatchEvent(new Event('input')); }
+                    if (saved.sizes[i]) { 
+                        input.value = saved.sizes[i]; 
+                        input.dispatchEvent(new Event('input')); 
+                    }
                 });
             }
             if (saved.ral) {
@@ -775,6 +778,18 @@
             }
             
             isRestoring = false;
+            
+            // Пересохраняем только если есть данные
+            const hasAnyData = 
+                document.getElementById('matchGCH')?.value ||
+                document.querySelector('.size-input')?.value ||
+                document.getElementById('ralInput')?.value ||
+                document.getElementById('massInput')?.value ||
+                document.querySelector('.pg3-checkbox:checked');
+            
+            if (hasAnyData) {
+                await autoSave();
+            }
         } catch (e) {
             console.error('Ошибка загрузки:', e);
             isRestoring = false;

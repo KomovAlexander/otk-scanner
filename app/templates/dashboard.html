@@ -69,6 +69,20 @@
         background: #4caf50;
         color: #fff;
     }
+    .step-badge {
+        display: inline-block;
+        padding: 4px 10px;
+        border-radius: 6px;
+        font-size: 12px;
+        font-weight: 600;
+        background: #2a2d35;
+        color: #ccc;
+        margin-right: 6px;
+    }
+    .step-badge.current {
+        background: #ff6b35;
+        color: #fff;
+    }
     .btn-action {
         padding: 6px 12px;
         border-radius: 6px;
@@ -94,6 +108,12 @@
     }
     .empty-state .icon { font-size: 60px; margin-bottom: 16px; }
     .empty-state p { font-size: 16px; }
+    @media (max-width: 768px) {
+        .orders-table { font-size: 12px; }
+        .orders-table th, .orders-table td { padding: 8px 10px; }
+        .btn-action { padding: 4px 8px; font-size: 11px; }
+        .dashboard-header { flex-direction: column; gap: 12px; }
+    }
 </style>
 {% endblock %}
 
@@ -134,7 +154,9 @@
                     <a href="/photo?order_id={{ order.id }}" class="btn-action btn-photo">Фото ({{ order.photos | length }})</a>
                     {% endif %}
                     {% else %}
-                    <a href="/?order_id={{ order.id }}" class="btn-action btn-continue">Продолжить</a>
+                    <a href="{{ order.current_step_url }}?order_id={{ order.id }}" class="btn-action btn-continue">
+                        Продолжить →
+                    </a>
                     {% endif %}
                 </td>
             </tr>

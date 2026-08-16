@@ -27,7 +27,8 @@
         color: #fff;
         font-size: 13px;
     }
-    .param-table input.param-name { min-width: 200px; }
+    .param-table input.param-name { min-width: 180px; }
+    .param-table input.pos-input { width: 60px; text-align: center; }
     .param-table input.param-value { width: 70px; text-align: center; }
     .param-table input.param-unit { width: 60px; text-align: center; }
     .param-table input.param-tolerance { width: 80px; text-align: center; }
@@ -101,7 +102,7 @@
         <h3 style="margin-top: 20px;">📊 Параметры (редактируемые):</h3>
         <table class="param-table">
             <thead>
-                <tr><th>Параметр</th><th>Значение</th><th>Ед.</th><th>Допуск</th><th></th></tr>
+                <tr><th>Поз.</th><th>Параметр</th><th>Значение</th><th>Ед.</th><th>Допуск</th><th></th></tr>
             </thead>
             <tbody id="paramsBody"></tbody>
         </table>
@@ -145,7 +146,7 @@
         <h3 style="margin-top: 20px;">📊 Параметры (редактируемые):</h3>
         <table class="param-table">
             <thead>
-                <tr><th>Параметр</th><th>Значение</th><th>Ед.</th><th>Допуск</th><th></th></tr>
+                <tr><th>Поз.</th><th>Параметр</th><th>Значение</th><th>Ед.</th><th>Допуск</th><th></th></tr>
             </thead>
             <tbody id="paramsBody"></tbody>
         </table>
@@ -231,11 +232,12 @@
     function renderParams() {
         const tbody = document.getElementById('paramsBody');
         if (!currentParams || currentParams.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#888;">Параметры не найдены</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#888;">Параметры не найдены</td></tr>';
             return;
         }
         tbody.innerHTML = currentParams.map((p, i) => `
             <tr>
+                <td><input type="text" class="pos-input" value="${p.position || ''}" oninput="updateParam(${i}, 'position', this.value)"></td>
                 <td><input type="text" class="param-name" value="${p.name || ''}" oninput="updateParam(${i}, 'name', this.value)"></td>
                 <td><input type="text" class="param-value" value="${p.value || ''}" oninput="updateParam(${i}, 'value', this.value)"></td>
                 <td><input type="text" class="param-unit" value="${p.unit || ''}" oninput="updateParam(${i}, 'unit', this.value)"></td>
@@ -245,9 +247,27 @@
         `).join('');
     }
 
-    function updateParam(index, field, value) { if (!currentParams[index]) return; currentParams[index][field] = value; }
-    function deleteParam(index) { currentParams.splice(index, 1); renderParams(); }
-    function addParam() { currentParams.push({ name: '', value: '', unit: '', tolerance: '', type: '' }); renderParams(); }
+    function updateParam(index, field, value) { 
+        if (!currentParams[index]) return; 
+        currentParams[index][field] = value; 
+    }
+    
+    function deleteParam(index) { 
+        currentParams.splice(index, 1); 
+        renderParams(); 
+    }
+    
+    function addParam() { 
+        currentParams.push({ 
+            type: '', 
+            name: '', 
+            position: '', 
+            value: '', 
+            unit: '', 
+            tolerance: '' 
+        }); 
+        renderParams(); 
+    }
 
     async function goNext() {
         const params = new URLSearchParams(window.location.search);
@@ -256,7 +276,11 @@
             await fetch('/api/save-g3', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ order_id: parseInt(orderId), g3_number: document.getElementById('g3Number').value, params: currentParams })
+                body: JSON.stringify({ 
+                    order_id: parseInt(orderId), 
+                    g3_number: document.getElementById('g3Number').value, 
+                    params: currentParams 
+                })
             });
         }
         window.location.href = '/check-pg3?' + params.toString();

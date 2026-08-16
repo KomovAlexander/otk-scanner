@@ -45,10 +45,12 @@ async def create_user_route(request: Request):
     password = form.get("password", "").strip()
     first_name = form.get("first_name", "").strip()
     last_name = form.get("last_name", "").strip()
+    middle_name = form.get("middle_name", "").strip()
+    position = form.get("position", "").strip()
     role = form.get("role", "tester")
     
     if login and password:
-        create_user(login, password, first_name, last_name, role)
+        create_user(login, password, first_name, last_name, middle_name, position, role)
     
     return RedirectResponse("/admin", status_code=303)
 

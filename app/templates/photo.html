@@ -72,7 +72,7 @@
 {% block content %}
 <div class="page-container">
     <div class="page-header">
-        <h1>Фотографирование изделия</h1>
+        <h1>📸 Фотографирование изделия</h1>
         <p>Сфотографируйте готовую станцию с шильдиком</p>
     </div>
 
@@ -83,44 +83,64 @@
 
     <div class="photo-grid" id="photoGrid">
         <!-- Фото 1 -->
-        <div class="photo-card" id="photoCard1">
+        <div class="photo-card {% if photos and photos|length >= 1 %}completed{% endif %}" id="photoCard1">
             <div class="icon">📷</div>
             <div class="title">Вид спереди</div>
+            {% if photos and photos|length >= 1 %}
+            <img src="{{ photos[0] }}" style="display:block;">
+            <button class="btn-capture" onclick="takePhoto(1)">📷 Переснять</button>
+            {% else %}
             <img id="preview1" style="display:none;">
-            <input type="file" id="file1" accept="image/*" capture="environment" hidden>
             <button class="btn-capture" id="btn1" onclick="takePhoto(1)">Сделать фото</button>
+            {% endif %}
+            <input type="file" id="file1" accept="image/*" capture="environment" hidden>
         </div>
 
         <!-- Фото 2 -->
-        <div class="photo-card" id="photoCard2">
+        <div class="photo-card {% if photos and photos|length >= 2 %}completed{% endif %}" id="photoCard2">
             <div class="icon">📷</div>
             <div class="title">Вид справа</div>
+            {% if photos and photos|length >= 2 %}
+            <img src="{{ photos[1] }}" style="display:block;">
+            <button class="btn-capture" onclick="takePhoto(2)">📷 Переснять</button>
+            {% else %}
             <img id="preview2" style="display:none;">
-            <input type="file" id="file2" accept="image/*" capture="environment" hidden>
             <button class="btn-capture" id="btn2" onclick="takePhoto(2)">Сделать фото</button>
+            {% endif %}
+            <input type="file" id="file2" accept="image/*" capture="environment" hidden>
         </div>
 
         <!-- Фото 3 -->
-        <div class="photo-card" id="photoCard3">
+        <div class="photo-card {% if photos and photos|length >= 3 %}completed{% endif %}" id="photoCard3">
             <div class="icon">📷</div>
             <div class="title">Вид сзади</div>
+            {% if photos and photos|length >= 3 %}
+            <img src="{{ photos[2] }}" style="display:block;">
+            <button class="btn-capture" onclick="takePhoto(3)">📷 Переснять</button>
+            {% else %}
             <img id="preview3" style="display:none;">
-            <input type="file" id="file3" accept="image/*" capture="environment" hidden>
             <button class="btn-capture" id="btn3" onclick="takePhoto(3)">Сделать фото</button>
+            {% endif %}
+            <input type="file" id="file3" accept="image/*" capture="environment" hidden>
         </div>
 
         <!-- Фото 4 -->
-        <div class="photo-card" id="photoCard4">
+        <div class="photo-card {% if photos and photos|length >= 4 %}completed{% endif %}" id="photoCard4">
             <div class="icon">📷</div>
             <div class="title">Вид слева</div>
+            {% if photos and photos|length >= 4 %}
+            <img src="{{ photos[3] }}" style="display:block;">
+            <button class="btn-capture" onclick="takePhoto(4)">📷 Переснять</button>
+            {% else %}
             <img id="preview4" style="display:none;">
-            <input type="file" id="file4" accept="image/*" capture="environment" hidden>
             <button class="btn-capture" id="btn4" onclick="takePhoto(4)">Сделать фото</button>
+            {% endif %}
+            <input type="file" id="file4" accept="image/*" capture="environment" hidden>
         </div>
     </div>
 
     <button class="btn-add-photo" id="btnAddPhoto" onclick="addPhoto()">Добавить ещё фото</button>
-    <button class="btn-next" id="btnNext" onclick="finishPhotos()" style="display:none;">Завершить</button>
+    <button class="btn-next" id="btnNext" onclick="finishPhotos()" {% if not photos or photos|length < 4 %}style="display:none;"{% endif %}>Завершить</button>
 </div>
 {% endblock %}
 
@@ -128,6 +148,13 @@
 <script>
     let photosTaken = {};
     let photoCount = 4;
+
+    // Инициализируем photosTaken из существующих фото
+    {% if photos %}
+    {% for photo in photos %}
+    photosTaken[{{ loop.index }}] = true;
+    {% endfor %}
+    {% endif %}
 
     function takePhoto(index) {
         document.getElementById('file' + index).click();
@@ -148,7 +175,6 @@
         `;
         grid.appendChild(card);
         
-        // Привязываем обработчик
         document.getElementById('file' + photoCount).addEventListener('change', handleFile);
     }
 
@@ -161,15 +187,23 @@
         
         const reader = new FileReader();
         reader.onload = (e) => {
-            document.getElementById('preview' + index).src = e.target.result;
-            document.getElementById('preview' + index).style.display = 'block';
+            // Обновляем превью
+            let preview = document.getElementById('preview' + index);
+            if (!preview) {
+                preview = document.createElement('img');
+                preview.id = 'preview' + index;
+                input.parentElement.insertBefore(preview, input);
+            }
+            preview.src = e.target.result;
+            preview.style.display = 'block';
             
             const card = document.getElementById('photoCard' + index);
             card.classList.add('completed');
             
-            const btn = document.getElementById('btn' + index);
-            btn.textContent = '✓ Готово';
-            btn.disabled = true;
+            // Обновляем кнопку
+            const btn = card.querySelector('.btn-capture');
+            btn.textContent = '📷 Переснять';
+            btn.disabled = false;
             
             photosTaken[index] = true;
             
@@ -181,9 +215,13 @@
             fetch(`/api/upload-photo?order_id=${orderId}&photo_index=${index}`, {
                 method: 'POST',
                 body: formData
-            }).catch(err => console.error('Ошибка загрузки:', err));
-            
-            checkAllPhotos();
+            })
+            .then(res => res.json())
+            .then(data => {
+                console.log('Фото загружено:', data);
+                checkAllPhotos();
+            })
+            .catch(err => console.error('Ошибка загрузки:', err));
         };
         reader.readAsDataURL(file);
     }
@@ -197,7 +235,7 @@
 
     function finishPhotos() {
         const params = new URLSearchParams(window.location.search);
-        window.location.href = '/?' + params.toString();
+        window.location.href = '/protocol?' + params.toString();
     }
 
     // Привязываем обработчики к первым 4 фото
