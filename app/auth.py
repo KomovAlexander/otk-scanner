@@ -1,3 +1,5 @@
+# ========== auth.py ==========
+
 import hashlib
 from fastapi import Request, HTTPException
 from app.database import get_user_by_login
