@@ -128,15 +128,18 @@ def extract_params_via_gpt(recognized_text: str, product_name: str) -> list:
 def extract_pg3_via_gpt(recognized_text: str, product_name: str) -> list:
     """Извлекает перечень элементов из ПГ3 через YandexGPT."""
 
-    prompt = f"""Распознанный текст с перечня элементов (ПГ3):
-{recognized_text[:3000]}
+    if not recognized_text or not recognized_text.strip():
+        print("⚠️ Пустой текст, GPT не вызывается")
+        return []
 
-Извлеки ВСЕ позиции в формате JSON-массива. Каждый объект должен иметь поля:
-- position: номер позиции (строка)
-- name: наименование
-- quantity: количество (строка)
+    prompt = f"""Извлеки ВСЕ позиции из перечня элементов (ПГ3):
+{recognized_text[:8000]}
 
-Верни ТОЛЬКО JSON-массив, без лишнего текста."""
+Верни ТОЛЬКО JSON-массив. Каждый объект:
+{{"position": "номер", "name": "наименование", "quantity": "количество"}}
+
+Если количество не указано — "1".
+Верни JSON одной строкой, без переносов, без Markdown."""
 
     url = "https://llm.api.cloud.yandex.net/foundationModels/v1/completion"
     headers = {
@@ -148,11 +151,10 @@ def extract_pg3_via_gpt(recognized_text: str, product_name: str) -> list:
         "completionOptions": {
             "stream": False,
             "temperature": 0.0,
-            "maxTokens": 2000,
+            "maxTokens": 8000,
         },
         "messages": [
-            {"role": "system",
-                "text": "Ты — инженер. Извлекай перечень элементов в формате JSON."},
+            {"role": "system", "text": "Ты — инженер. Извлекай позиции из перечня элементов."},
             {"role": "user", "text": prompt}
         ]
     }
@@ -169,6 +171,7 @@ def extract_pg3_via_gpt(recognized_text: str, product_name: str) -> list:
         return []
 
     print(f"GPT ответ (ПГ3): {text[:500]}")
+    print(f"Длина ответа: {len(text)} символов")
 
     text = text.replace("```json", "").replace("```", "").strip()
 
@@ -176,9 +179,21 @@ def extract_pg3_via_gpt(recognized_text: str, product_name: str) -> list:
     if json_match:
         try:
             items = json.loads(json_match.group(0))
-            print(f"GPT извлёк {len(items)} позиций")
-            return items
-        except json.JSONDecodeError:
-            pass
+            normalized = []
+            for item in items:
+                if isinstance(item, dict) and "name" in item:
+                    quantity = str(item.get("quantity", "")).strip()
+                    if not quantity:
+                        quantity = "1"
+                    normalized.append({
+                        "position": str(item.get("position", "")).strip(),
+                        "name": item.get("name", ""),
+                        "quantity": quantity
+                    })
+            print(f"GPT извлёк {len(normalized)} позиций")
+            return normalized
+        except json.JSONDecodeError as e:
+            print(f"Ошибка JSON: {e}")
+            print(f"Полный ответ: {text}")
 
     return []

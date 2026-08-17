@@ -616,6 +616,17 @@
                 position: cb.dataset.position,
                 confirmed: cb.checked
             })),
+            // Сохраняем изменённые позиции ПГ3
+            pg3_changes: Array.from(document.querySelectorAll('.pg3-name')).map(input => {
+                const row = input.closest('tr');
+                return {
+                    position: row.dataset.position,
+                    name: input.value.trim(),
+                    original_name: input.dataset.original,
+                    quantity: row.querySelector('.pg3-qty')?.value.trim() || '',
+                    expected_quantity: row.querySelector('.pg3-qty')?.dataset.expected || ''
+                };
+            }),
             deviations: deviations
         };
 
@@ -657,6 +668,7 @@
             const qtyInput = row.querySelector('.pg3-qty');
             const nameChanged = nameInput.value.trim() !== nameInput.dataset.original;
             const qtyChanged = qtyInput.value.trim() !== qtyInput.dataset.expected;
+            // Позиция подтверждена, если галочка стоит ИЛИ есть изменения
             if (!cb.checked && !nameChanged && !qtyChanged) allFilled = false;
         });
         
@@ -714,6 +726,7 @@
         });
     });
 
+    // Загрузка сохранённых данных из БД
     // Загрузка сохранённых данных из БД
     (async function loadSavedData() {
         const params = new URLSearchParams(window.location.search);
@@ -777,6 +790,24 @@
                 });
             }
             
+            // Восстанавливаем изменения ПГ3
+            if (saved.pg3_changes) {
+                saved.pg3_changes.forEach(change => {
+                    const row = document.querySelector(`tr[data-position="${change.position}"]`);
+                    if (row) {
+                        const nameInput = row.querySelector('.pg3-name');
+                        const qtyInput = row.querySelector('.pg3-qty');
+                        if (nameInput && change.name) {
+                            nameInput.value = change.name;
+                        }
+                        if (qtyInput && change.quantity) {
+                            qtyInput.value = change.quantity;
+                        }
+                        updateRowStatus(row);
+                    }
+                });
+            }
+            
             isRestoring = false;
             
             // Пересохраняем только если есть данные
@@ -785,7 +816,9 @@
                 document.querySelector('.size-input')?.value ||
                 document.getElementById('ralInput')?.value ||
                 document.getElementById('massInput')?.value ||
-                document.querySelector('.pg3-checkbox:checked');
+                document.querySelector('.pg3-checkbox:checked') ||
+                document.querySelector('.pg3-name[data-original]:not([data-original=""])')?.value !== 
+                    document.querySelector('.pg3-name[data-original]:not([data-original=""])')?.dataset.original;
             
             if (hasAnyData) {
                 await autoSave();

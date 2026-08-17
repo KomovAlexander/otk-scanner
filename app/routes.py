@@ -699,9 +699,25 @@ async def api_save_visual(request: Request):
         if not g3_values or any(not v.get("value") for v in g3_values):
             all_filled = False
         
-        # 7. Все позиции ПГ3 подтверждены
+        # 7. Все позиции ПГ3 подтверждены ИЛИ изменены
         pg3_confirmed = data.get("pg3_confirmed", [])
-        if not pg3_confirmed or any(not c.get("confirmed") for c in pg3_confirmed):
+        pg3_changes = data.get("pg3_changes", [])
+        
+        confirmed_positions = set()
+        for c in pg3_confirmed:
+            if c.get("confirmed"):
+                confirmed_positions.add(c.get("position"))
+        
+        for change in pg3_changes:
+            position = change.get("position", "")
+            name = change.get("name", "")
+            original_name = change.get("original_name", "")
+            quantity = change.get("quantity", "")
+            expected_quantity = change.get("expected_quantity", "")
+            if name != original_name or quantity != expected_quantity:
+                confirmed_positions.add(position)
+        
+        if not pg3_confirmed or len(confirmed_positions) != len(pg3_confirmed):
             all_filled = False
         
         # Только если ВСЁ заполнено — отмечаем шаг пройденным
