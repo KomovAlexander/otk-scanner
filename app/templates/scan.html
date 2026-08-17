@@ -136,6 +136,13 @@
             fetch('/api/scan', { method: 'POST', body: formData })
                 .then(res => res.json())
                 .then(data => {
+                    // Проверяем статус
+                    if (data.status === 'error') {
+                        alert(data.message);
+                        scanAnimation.style.display = 'none';
+                        return;
+                    }
+                    
                     scanAnimation.style.display = 'none';
                     dataCard.style.display = 'block';
                     hasData = true;
@@ -145,7 +152,10 @@
                     document.getElementById('productName').value = data.product_name;
                     currentOrderId = data.order_id;
                 })
-                .catch(err => alert('Ошибка: ' + err));
+                .catch(err => {
+                    alert('Ошибка: ' + err);
+                    scanAnimation.style.display = 'none';
+                });
         });
     });
 

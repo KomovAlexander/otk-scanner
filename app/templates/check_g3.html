@@ -215,6 +215,21 @@
                         scanAnimation.style.display = 'none';
                         return;
                     }
+                    
+                    if (data.status === 'warning') {
+                        const userConfirmed = confirm(
+                            data.message + '\n\n' +
+                            'Нажмите "OK" — если это правильный документ (OCR ошибся).\n' +
+                            'Нажмите "Отмена" — если это не тот документ.'
+                        );
+                        
+                        if (!userConfirmed) {
+                            scanAnimation.style.display = 'none';
+                            alert('Документ отклонён. Сфотографируйте правильный документ.');
+                            return;
+                        }
+                    }
+                    
                     if (scanAnimation) scanAnimation.style.display = 'none';
                     if (dataCard) dataCard.style.display = 'block';
                     btnNext.style.display = 'block';

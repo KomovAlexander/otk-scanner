@@ -201,29 +201,44 @@ def scan_document(image_path: str) -> dict:
     department = dept_match.group(1).strip() if dept_match else "НЕ НАЙДЕНО"
 
     # ── 3. Изделие ───────────────────────────────
-    # Ищем "Изделие:" и ближайший CTR-KV после него
+    # Ищем известные префиксы изделий
+    product_patterns = [
+        r"CTR[.\-\s]?KV[.\-\s]?[A-ZА-Я0-9.\-]+",
+        r"PM[.\-\s]?[A-ZА-Я0-9.\-]+",
+        r"BLKV[.\-\s]?[A-ZА-Я0-9.\-]+",
+        r"PNKV[.\-\s]?[A-ZА-Я0-9.\-]+",
+        r"PPC[.\-\s]?[A-ZА-Я0-9.\-]+",
+    ]
+    
+    product_name = "НЕ НАЙДЕНО"
+    
+    # Сначала ищем в строке "Изделие:"
     product_match = re.search(
-        r"Изделие\s*:?\s*\n\s*(.+)",
+        r"Изделие\s*:?\s*\n?\s*(.+)",
         recognized_text, re.IGNORECASE,
     )
     if product_match:
-        product_name = product_match.group(1).strip()
-        # Если не похоже на изделие — ищем CTR-KV дальше
-        if "CTR" not in product_name.upper():
-            product_match = re.search(
-                r"CTR[.\-\s]?KV[.\-\s]?[A-ZА-Я0-9.\-]{2,}",
-                recognized_text, re.IGNORECASE,
-            )
-            product_name = product_match.group(
-                0).strip() if product_match else "НЕ НАЙДЕНО"
+        candidate = product_match.group(1).strip()
+        # Проверяем, похоже ли на изделие
+        for pattern in product_patterns:
+            if re.search(pattern, candidate, re.IGNORECASE):
+                product_match2 = re.search(pattern, candidate, re.IGNORECASE)
+                product_name = product_match2.group(0).strip()
+                break
+        else:
+            # Если не нашли — ищем по всему тексту
+            for pattern in product_patterns:
+                product_match2 = re.search(pattern, recognized_text, re.IGNORECASE)
+                if product_match2:
+                    product_name = product_match2.group(0).strip()
+                    break
     else:
-        # Запасной: ищем CTR-KV в любом месте
-        product_match = re.search(
-            r"CTR[.\-\s]?KV[.\-\s]?[A-ZА-Я0-9.\-]{2,}",
-            recognized_text, re.IGNORECASE,
-        )
-        product_name = product_match.group(
-            0).strip() if product_match else "НЕ НАЙДЕНО"
+        # Ищем по всему тексту
+        for pattern in product_patterns:
+            product_match2 = re.search(pattern, recognized_text, re.IGNORECASE)
+            if product_match2:
+                product_name = product_match2.group(0).strip()
+                break
 
     print(f"\n>>> РЕЗУЛЬТАТ: заказ={order_number}, отдел={department}, изделие={product_name}")
 

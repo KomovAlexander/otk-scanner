@@ -198,19 +198,49 @@ async def api_scan(request: Request, file: UploadFile = File(...)):
     order_number = result.get("order_number", "НЕ НАЙДЕНО")
     product_name = result.get("product_name", "НЕ НАЙДЕНО")
     department = result.get("department", "НЕ НАЙДЕНО")
+    full_text = result.get("full_text", "")
+
+    import re
+
+    # Проверяем, что это заказ на производство
+    is_order = False
+    
+    if "Задание на производство" in full_text:
+        is_order = True
+    elif "Заказ на производство" in full_text:
+        is_order = True
+    elif re.search(r"ПС\d{2}[.\-]\d{2,4}[.\-]\d{1,2}", full_text):
+        is_order = True
+    elif order_number not in ("НЕ НАЙДЕНО", "ОШИБКА API", "", None):
+        is_order = True
+    
+    if not is_order:
+        os.remove(temp_path)
+        return JSONResponse(content={
+            "status": "error",
+            "message": "❌ Это не заказ на производство! Сфотографируйте задание на производство."
+        })
 
     if order_number in ("НЕ НАЙДЕНО", "ОШИБКА API", "", None):
         os.remove(temp_path)
         return JSONResponse(content={"status": "error", "message": "❌ Номер заказа не найден!"})
 
-    if product_name in ("НЕ НАЙДЕНО", "ОШИБКА API", "", None):
-        os.remove(temp_path)
-        return JSONResponse(content={"status": "error", "message": "❌ Изделие не найдено!"})
-
-    # Создаём заказ и получаем его ID
+    # Проверяем, есть ли уже такой заказ в БД
     from app.database import get_or_create_order
-    order_id = get_or_create_order(
-        order_number, product_name, department, user["id"])
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM orders WHERE order_number = ?", (order_number,))
+    existing_order = cursor.fetchone()
+    conn.close()
+
+    if existing_order:
+        # Заказ уже существует — берём изделие из БД
+        product_name = existing_order["product_name"]
+        department = existing_order["department"]
+        order_id = existing_order["id"]
+    else:
+        # Новый заказ — создаём с распознанными данными
+        order_id = get_or_create_order(order_number, product_name, department, user["id"])
 
     # Сохраняем фото заказа
     order_dir = os.path.join(UPLOAD_ROOT, f"order_{order_id}")
@@ -330,24 +360,45 @@ async def api_scan_gch(request: Request, file: UploadFile = File(...)):
     result = scan_document(file_path)
     full_text = result.get("full_text", "")
 
-    if "ГЧ" not in full_text and "Габаритный" not in full_text:
-        return JSONResponse(content={"status": "error", "message": "❌ Это не ГЧ! Сфотографируйте габаритный чертёж."})
-
+    # Ищем номер документа (ГЧ или СБ)
     gch_match = re.search(
-        r"([A-ZА-Я]{1,2}\d{1,2}[.\-]\d{3,4}[.\-]\d{3,4}[.\-]\d{3,4}\s*ГЧ)",
+        r"([A-ZА-Я0-9]{1,3}[.\-]\d{1,4}[.\-]\d{3,4}[.\-]\d{3,4}(?:[.\-]\d{1,3})?\s*(?:ГЧ|СБ))",
         full_text, re.IGNORECASE,
     )
     gch_number = gch_match.group(1).strip() if gch_match else "НЕ НАЙДЕНО"
 
+    # Проверяем тип документа: текст "ГЧ" ИЛИ "Габаритный" ИЛИ номер найден
+    if "ГЧ" not in full_text and "Габаритный" not in full_text and not gch_match:
+        return JSONResponse(content={"status": "error", "message": "❌ Это не ГЧ! Сфотографируйте габаритный чертёж."})
+
     product_match = re.search(
         r"CTR[.\-\s]?KV[.\-\s]?[A-ZА-Я0-9.\-]{2,}", full_text, re.IGNORECASE)
-    found_product = product_match.group(
-        0).strip() if product_match else "НЕ НАЙДЕНО"
+    found_product = product_match.group(0).strip() if product_match else "НЕ НАЙДЕНО"
 
     order_id_str = request.query_params.get("order_id", None)
     product_error = check_product_match(order_id_str, found_product)
     if product_error:
-        return JSONResponse(content={"status": "error", "message": product_error})
+        # Проверяем: это предупреждение (⚠️) или ошибка (❌)
+        if product_error.startswith("⚠️"):
+            # Предупреждение — отдаём данные, но со статусом warning
+            ral_match = re.search(r"RAL\s*(\d{4})", full_text, re.IGNORECASE)
+            ral = ral_match.group(1).strip() if ral_match else ""
+            
+            from app.green_extractor import extract_all_colored_numbers
+            numbers = extract_all_colored_numbers(file_path)
+            
+            return JSONResponse(content={
+                "status": "warning",
+                "message": product_error,
+                "gch_number": gch_number,
+                "found_product": found_product,
+                "ral": ral,
+                "numbers": numbers,
+                "count": len(numbers),
+            })
+        else:
+            # Ошибка — блокируем
+            return JSONResponse(content={"status": "error", "message": product_error})
 
     ral_match = re.search(r"RAL\s*(\d{4})", full_text, re.IGNORECASE)
     ral = ral_match.group(1).strip() if ral_match else ""
@@ -470,23 +521,38 @@ async def api_scan_g3(request: Request, file: UploadFile = File(...)):
     result = scan_document(file_path)
     full_text = result.get("full_text", "")
 
-    if "Г3" not in full_text and "ГЗ" not in full_text and "Схема гидравлическая" not in full_text:
-        return JSONResponse(content={"status": "error", "message": "❌ Это не Г3! Сфотографируйте гидравлическую схему."})
-
+    # Ищем номер документа Г3
     g3_match = re.search(
-        r"([A-ZА-Я]{1,2}\d{1,2}[.\-]\d{3,4}[.\-]\d{3,4}[.\-]\d{3,4}\s*Г[3З])", full_text, re.IGNORECASE)
-    g3_number = g3_match.group(1).strip().replace(
-        'ГЗ', 'Г3') if g3_match else "НЕ НАЙДЕНО"
+        r"([A-ZА-Я0-9]{1,3}[.\-]\d{1,4}[.\-]\d{3,4}[.\-]\d{3,4}(?:[.\-]\d{1,3})?\s*Г[3З])",
+        full_text, re.IGNORECASE
+    )
+    g3_number = g3_match.group(1).strip().replace('ГЗ', 'Г3') if g3_match else "НЕ НАЙДЕНО"
+
+    # Проверяем тип документа: текст "Г3" ИЛИ "Схема гидравлическая" ИЛИ номер найден
+    if "Г3" not in full_text and "ГЗ" not in full_text and "Схема гидравлическая" not in full_text and not g3_match:
+        return JSONResponse(content={"status": "error", "message": "❌ Это не Г3! Сфотографируйте гидравлическую схему."})
 
     product_match = re.search(
         r"CTR[.\-\s]?KV[.\-\s]?[A-ZА-Я0-9.\-]{2,}", full_text, re.IGNORECASE)
-    found_product = product_match.group(
-        0).strip() if product_match else "НЕ НАЙДЕНО"
+    found_product = product_match.group(0).strip() if product_match else "НЕ НАЙДЕНО"
 
     order_id_str = request.query_params.get("order_id", None)
     product_error = check_product_match(order_id_str, found_product)
     if product_error:
-        return JSONResponse(content={"status": "error", "message": product_error})
+        if product_error.startswith("⚠️"):
+            from app.param_extractor import extract_params_via_gpt
+            params = extract_params_via_gpt(full_text, found_product)
+            
+            return JSONResponse(content={
+                "status": "warning",
+                "message": product_error,
+                "g3_number": g3_number,
+                "found_product": found_product,
+                "params": params,
+                "count": len(params),
+            })
+        else:
+            return JSONResponse(content={"status": "error", "message": product_error})
 
     from app.param_extractor import extract_params_via_gpt
     params = extract_params_via_gpt(full_text, found_product)
@@ -603,23 +669,38 @@ async def api_scan_pg3(request: Request, file: UploadFile = File(...)):
     result = scan_document(file_path)
     full_text = result.get("full_text", "")
 
-    if "ПГ3" not in full_text and "ПГЗ" not in full_text and "Перечень элементов" not in full_text:
-        return JSONResponse(content={"status": "error", "message": "❌ Это не ПГ3! Сфотографируйте перечень элементов."})
-
+    # Ищем номер документа ПГ3
     pg3_match = re.search(
-        r"([A-ZА-Я]{1,2}\d{1,2}[.\-]\d{3,4}[.\-]\d{3,4}[.\-]\d{3,4}\s*ПГ[3З])", full_text, re.IGNORECASE)
-    pg3_number = pg3_match.group(1).strip().replace(
-        'ПГЗ', 'ПГ3') if pg3_match else "НЕ НАЙДЕНО"
+        r"([A-ZА-Я0-9]{1,3}[.\-]\d{1,4}[.\-]\d{3,4}[.\-]\d{3,4}(?:[.\-]\d{1,3})?\s*ПГ[3З])",
+        full_text, re.IGNORECASE
+    )
+    pg3_number = pg3_match.group(1).strip().replace('ПГЗ', 'ПГ3') if pg3_match else "НЕ НАЙДЕНО"
+
+    # Проверяем тип документа: текст "ПГ3" ИЛИ "Перечень элементов" ИЛИ номер найден
+    if "ПГ3" not in full_text and "ПГЗ" not in full_text and "Перечень элементов" not in full_text and not pg3_match:
+        return JSONResponse(content={"status": "error", "message": "❌ Это не ПГ3! Сфотографируйте перечень элементов."})
 
     product_match = re.search(
         r"CTR[.\-\s]?KV[.\-\s]?[A-ZА-Я0-9.\-]{2,}", full_text, re.IGNORECASE)
-    found_product = product_match.group(
-        0).strip() if product_match else "НЕ НАЙДЕНО"
+    found_product = product_match.group(0).strip() if product_match else "НЕ НАЙДЕНО"
 
     order_id_str = request.query_params.get("order_id", None)
     product_error = check_product_match(order_id_str, found_product)
     if product_error:
-        return JSONResponse(content={"status": "error", "message": product_error})
+        if product_error.startswith("⚠️"):
+            from app.param_extractor import extract_pg3_via_gpt
+            items = extract_pg3_via_gpt(full_text, found_product)
+            
+            return JSONResponse(content={
+                "status": "warning",
+                "message": product_error,
+                "pg3_number": pg3_number,
+                "found_product": found_product,
+                "items": items,
+                "count": len(items),
+            })
+        else:
+            return JSONResponse(content={"status": "error", "message": product_error})
 
     from app.param_extractor import extract_pg3_via_gpt
     items = extract_pg3_via_gpt(full_text, found_product)
@@ -1110,3 +1191,70 @@ def logout(request: Request):
     request.session.clear()
     return RedirectResponse("/login", status_code=303)
 
+# ── Вспомогательные функции ─────────────────────
+
+def levenshtein_distance(s1: str, s2: str) -> int:
+    """Вычисляет расстояние Левенштейна между двумя строками."""
+    if len(s1) < len(s2):
+        return levenshtein_distance(s2, s1)
+    
+    if len(s2) == 0:
+        return len(s1)
+    
+    previous_row = range(len(s2) + 1)
+    for i, c1 in enumerate(s1):
+        current_row = [i + 1]
+        for j, c2 in enumerate(s2):
+            insertions = previous_row[j + 1] + 1
+            deletions = current_row[j] + 1
+            substitutions = previous_row[j] + (c1 != c2)
+            current_row.append(min(insertions, deletions, substitutions))
+        previous_row = current_row
+    
+    return previous_row[-1]
+
+
+def check_product_match(order_id: str, found_product: str) -> str | None:
+    """Проверяет, что изделие в документе совпадает с заказом."""
+    if not order_id or not found_product:
+        return None
+
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT product_name, order_number FROM orders WHERE id = ?", (int(order_id),))
+    order_row = cursor.fetchone()
+    conn.close()
+
+    if not order_row:
+        return None
+
+    order_product = order_row["product_name"]
+    order_number = order_row["order_number"]
+    
+    # Нормализуем: убираем дефисы, пробелы, приводим к верхнему регистру
+    def normalize_product(s: str) -> str:
+        s = s.upper()
+        s = s.replace("-", "").replace(" ", "").replace(".", "")
+        return s
+    
+    order_clean = normalize_product(order_product)
+    found_clean = normalize_product(found_product)
+
+    # Точное совпадение
+    if found_clean == order_clean:
+        return None
+    
+    # Если одна строка содержит другую
+    if found_clean in order_clean or order_clean in found_clean:
+        return None
+    
+    # Вычисляем расстояние Левенштейна
+    distance = levenshtein_distance(order_clean, found_clean)
+    
+    # Если разница 1-2 символа — предупреждение
+    if distance <= 2:
+        return f"⚠️ Изделие «{found_product}» отличается от заказа «{order_product}» на {distance} симв. Возможно, ошибка распознавания."
+    
+    # Если разница больше 2 символов — блокируем
+    return f"❌ Этот документ от изделия «{found_product}», а заказ №{order_number} на изделие «{order_product}»!"

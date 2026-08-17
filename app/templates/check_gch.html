@@ -207,7 +207,6 @@
                 if (previewArea) {
                     previewArea.innerHTML = `<img src="${e.target.result}" alt="Фото ГЧ">`;
                 } else {
-                    // Режим 2: обновляем фото
                     const photoPreview = document.querySelector('.photo-preview img');
                     if (photoPreview) photoPreview.src = e.target.result;
                 }
@@ -232,6 +231,21 @@
                         scanAnimation.style.display = 'none';
                         return;
                     }
+                    
+                    if (data.status === 'warning') {
+                        const userConfirmed = confirm(
+                            data.message + '\n\n' +
+                            'Нажмите "OK" — если это правильный документ (OCR ошибся).\n' +
+                            'Нажмите "Отмена" — если это не тот документ.'
+                        );
+                        
+                        if (!userConfirmed) {
+                            scanAnimation.style.display = 'none';
+                            alert('Документ отклонён. Сфотографируйте правильный документ.');
+                            return;
+                        }
+                    }
+                    
                     scanAnimation.style.display = 'none';
                     if (dataCard) dataCard.style.display = 'block';
                     btnNext.disabled = false;
