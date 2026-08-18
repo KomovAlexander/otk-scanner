@@ -305,6 +305,95 @@
     {% endif %}
 
     {% block content %}{% endblock %}
+    <div id="lightbox" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 9999; cursor: zoom-out; justify-content: center; align-items: center; flex-direction: column;" onclick="closeLightbox()">
+        <div style="display: flex; gap: 16px; margin-bottom: 16px; z-index: 10000;" onclick="event.stopPropagation();">
+            <button onclick="rotateLightbox(-90)" style="padding: 10px 16px; background: #2a2d35; color: #fff; border: 1px solid #3a3d45; border-radius: 8px; cursor: pointer; font-size: 18px;">⟲</button>
+            <button onclick="rotateLightbox(90)" style="padding: 10px 16px; background: #2a2d35; color: #fff; border: 1px solid #3a3d45; border-radius: 8px; cursor: pointer; font-size: 18px;">⟳</button>
+            <button onclick="saveRotatedImage()" style="padding: 10px 20px; background: #4caf50; color: #fff; border: none; border-radius: 8px; cursor: pointer; font-size: 16px;">💾 Сохранить</button>
+            <button onclick="closeLightbox()" style="padding: 10px 20px; background: #f44336; color: #fff; border: none; border-radius: 8px; cursor: pointer; font-size: 18px;">✕</button>
+        </div>
+        <img id="lightbox-img" src="" style="max-width: 95%; max-height: 85%; object-fit: contain; transition: transform 0.3s; cursor: default;">
+    </div>
+
+    <script>
+        let lightboxRotation = 0;
+        let currentImageSrc = '';
+        
+        function openLightbox(imgSrc) {
+            lightboxRotation = 0;
+            currentImageSrc = imgSrc;
+            document.getElementById('lightbox-img').src = imgSrc;
+            document.getElementById('lightbox-img').style.transform = 'rotate(0deg)';
+            document.getElementById('lightbox').style.display = 'flex';
+        }
+        
+        function closeLightbox() {
+            document.getElementById('lightbox').style.display = 'none';
+        }
+        
+        function rotateLightbox(degrees) {
+            lightboxRotation += degrees;
+            if (lightboxRotation >= 360) lightboxRotation -= 360;
+            if (lightboxRotation <= -360) lightboxRotation += 360;
+            document.getElementById('lightbox-img').style.transform = `rotate(${lightboxRotation}deg)`;
+        }
+        
+        async function saveRotatedImage() {
+            if (!currentImageSrc || lightboxRotation === 0) {
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/rotate-photo', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        image_path: currentImageSrc,
+                        rotation: lightboxRotation
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.status === 'ok') {
+                    const timestamp = new Date().getTime();
+                    
+                    // Обновляем ВСЕ фото на странице
+                    document.querySelectorAll('img').forEach(img => {
+                        if (img.src.includes(currentImageSrc.split('/').pop())) {
+                            img.src = data.new_url + '?t=' + timestamp;
+                        }
+                    });
+                    
+                    // Обновляем фото в лайтбоксе
+                    const lightboxImg = document.getElementById('lightbox-img');
+                    if (lightboxImg) {
+                        lightboxImg.src = data.new_url + '?t=' + timestamp;
+                        lightboxImg.style.transform = 'rotate(0deg)';
+                    }
+                    
+                    lightboxRotation = 0;
+                    closeLightbox();
+                } else {
+                    alert('❌ Ошибка сохранения: ' + data.message);
+                }
+            } catch (e) {
+                alert('Ошибка: ' + e);
+            }
+        }
+        
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') closeLightbox();
+            if (e.key === 'ArrowLeft') rotateLightbox(-90);
+            if (e.key === 'ArrowRight') rotateLightbox(90);
+        });
+        
+        document.addEventListener('click', function(e) {
+            if (e.target.tagName === 'IMG' && e.target.src && !e.target.closest('#lightbox')) {
+                openLightbox(e.target.src);
+            }
+        });
+    </script>
     {% block extra_js %}{% endblock %}
 </body>
 </html>

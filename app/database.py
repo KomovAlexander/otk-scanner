@@ -444,3 +444,27 @@ def is_order_completed(order_id: int) -> bool:
         if f.startswith("photo_") and f.endswith((".jpg", ".jpeg", ".png")):
             return True
     return False
+
+
+def delete_order(order_id: int):
+    """Удаляет заказ и все связанные данные."""
+    conn = get_db()
+    cursor = conn.cursor()
+    
+    # Удаляем все связанные данные
+    cursor.execute("DELETE FROM gch_data WHERE order_id = ?", (order_id,))
+    cursor.execute("DELETE FROM g3_data WHERE order_id = ?", (order_id,))
+    cursor.execute("DELETE FROM pg3_data WHERE order_id = ?", (order_id,))
+    cursor.execute("DELETE FROM visual_results WHERE order_id = ?", (order_id,))
+    cursor.execute("DELETE FROM measurement_results WHERE order_id = ?", (order_id,))
+    cursor.execute("DELETE FROM order_progress WHERE order_id = ?", (order_id,))
+    cursor.execute("DELETE FROM orders WHERE id = ?", (order_id,))
+    
+    conn.commit()
+    conn.close()
+    
+    # Удаляем папку с фото
+    import shutil
+    order_dir = os.path.join("app/static/uploads", f"order_{order_id}")
+    if os.path.exists(order_dir):
+        shutil.rmtree(order_dir)

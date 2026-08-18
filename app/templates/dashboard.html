@@ -108,6 +108,14 @@
     }
     .empty-state .icon { font-size: 60px; margin-bottom: 16px; }
     .empty-state p { font-size: 16px; }
+    .btn-delete-order {
+        background: #f44336;
+        color: #fff;
+        padding: 6px 10px;
+        border-radius: 6px;
+        font-size: 14px;
+    }
+    .btn-delete-order:hover { background: #d32f2f; }
     @media (max-width: 768px) {
         .orders-table { font-size: 12px; }
         .orders-table th, .orders-table td { padding: 8px 10px; }
@@ -146,19 +154,21 @@
                     <span class="status-badge status-in-progress">В процессе</span>
                     {% endif %}
                 </td>
-                <td>
-                    {% if order.is_completed %}
-                    <a href="/protocol?order_id={{ order.id }}" class="btn-action btn-protocol">Протокол</a>
-                    <a href="/shild?order_id={{ order.id }}" class="btn-action btn-shild">Шильдик</a>
-                    {% if order.photos %}
-                    <a href="/photo?order_id={{ order.id }}" class="btn-action btn-photo">Фото ({{ order.photos | length }})</a>
-                    {% endif %}
-                    {% else %}
-                    <a href="{{ order.current_step_url }}?order_id={{ order.id }}" class="btn-action btn-continue">
-                        Продолжить →
-                    </a>
-                    {% endif %}
-                </td>
+                    <td>
+                        {% if order.is_completed %}
+                        <a href="/protocol?order_id={{ order.id }}" class="btn-action btn-protocol">Протокол</a>
+                        <a href="/shild?order_id={{ order.id }}" class="btn-action btn-shild">Шильдик</a>
+                        {% if order.photos %}
+                        <a href="/photo?order_id={{ order.id }}" class="btn-action btn-photo">Фото ({{ order.photos | length }})</a>
+                        {% endif %}
+                        {% else %}
+                        <a href="{{ order.current_step_url }}?order_id={{ order.id }}" class="btn-action btn-continue">Продолжить →</a>
+                        {% endif %}
+                        {% if user.role == 'admin' %}
+                        <a href="/admin/orders/delete/{{ order.id }}" class="btn-action btn-delete-order" 
+                           onclick="return confirm('Удалить заказ {{ order.order_number }}? ВСЕ данные будут удалены!')">🗑️</a>
+                        {% endif %}
+                    </td>
             </tr>
             {% endfor %}
         </tbody>

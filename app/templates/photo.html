@@ -87,7 +87,7 @@
             <div class="icon">📷</div>
             <div class="title">Вид спереди</div>
             {% if photos and photos|length >= 1 %}
-            <img src="{{ photos[0] }}" style="display:block;">
+            <img src="{{ photos[0] }}" style="display:block;" class="zoomable">
             <button class="btn-capture" onclick="takePhoto(1)">📷 Переснять</button>
             {% else %}
             <img id="preview1" style="display:none;">
