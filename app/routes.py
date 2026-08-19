@@ -76,8 +76,7 @@ def check_document_match(order_id: str, found_product: str, doc_number: str) -> 
 
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute(
-        "SELECT product_name FROM orders WHERE id = ?", (int(order_id),))
+    cursor.execute("SELECT product_name FROM orders WHERE id = ?", (int(order_id),))
     row = cursor.fetchone()
     conn.close()
 
@@ -89,9 +88,11 @@ def check_document_match(order_id: str, found_product: str, doc_number: str) -> 
     def normalize(s: str) -> str:
         return s.upper().replace("-", "").replace(" ", "").replace(".", "")
 
-    # 1. Проверяем изделие
+    # Проверяем изделие
+    product_found = False
     product_ok = False
     if found_product and found_product != "НЕ НАЙДЕНО":
+        product_found = True
         op = normalize(order_product)
         fp = normalize(found_product)
         if fp == op or fp in op or op in fp:
@@ -99,85 +100,98 @@ def check_document_match(order_id: str, found_product: str, doc_number: str) -> 
         elif levenshtein_distance(op, fp) <= 2:
             product_ok = True
 
-    # 2. Проверяем номер документа (код изделия из номера)
+    # Проверяем номер документа
+    doc_found = False
     doc_ok = False
     if doc_number and doc_number != "НЕ НАЙДЕНО":
-        # Из номера документа извлекаем начало: "В1-0169" из "В1-0169.000.000 ГЧ"
-        doc_match = re.search(r'^([A-ZА-Я0-9]+[.\-]\d+)', doc_number.strip())
-        if doc_match:
-            doc_code = normalize(doc_match.group(1))  # "B10169"
+        doc_found = True
+        # Из номера документа обрезаем .000.000 и суффикс
+        doc_base = re.sub(r'[.\-\s]\d{3,4}[.\-\s]\d{3,4}.*$', '', doc_number.strip())
+        doc_base = re.sub(r'\s*(?:ГЧ|СБ|Г[3З]|ПГ[3З])$', '', doc_base)
+        doc_code = normalize(doc_base)
+        
+        # Нормализуем изделие
+        product_code = normalize(order_product)
+        
+        if doc_code == product_code:
+            doc_ok = True
+        elif doc_code in product_code or product_code in doc_code:
+            doc_ok = True
+        elif levenshtein_distance(doc_code, product_code) <= 2:
+            doc_ok = True
 
-            # Из изделия извлекаем код: "B1-0169" из "CTR-KV-B1-0169"
-            product_match = re.search(
-                r'([A-ZА-Я]+\d+[.\-]\d+)', order_product, re.IGNORECASE)
-            if product_match:
-                product_code = normalize(product_match.group(1))  # "B10169"
-
-                if doc_code == product_code or doc_code in product_code or product_code in doc_code:
-                    doc_ok = True
-                elif levenshtein_distance(doc_code, product_code) <= 2:
-                    doc_ok = True
-
-    # Итог
+    # Итог — упрощённая версия
     if product_ok and doc_ok:
-        return None  # ✅ Оба совпали
-    elif product_ok or doc_ok:
-        # ⚠️ Один совпал, второй нет
-        warnings = []
-        if not product_ok:
-            warnings.append(
-                f"изделие «{found_product}» не совпадает с «{order_product}»")
-        if not doc_ok:
-            warnings.append(
-                f"номер документа «{doc_number}» не соответствует изделию «{order_product}»")
-        return f"⚠️ {'; '.join(warnings)}. Перепроверьте документ."
+        return None  # ✅ Всё совпало
+    
+    elif not doc_found:
+        # Номер не найден — предупреждаем, но пропускаем
+        return f"⚠️ Номер документа не распознан. Изделие: «{found_product}». Продолжить?"
+    
+    elif not product_found:
+        # Изделие не найдено — предупреждаем
+        return f"⚠️ Изделие не распознано. Номер документа: «{doc_number}». Продолжить?"
+    
+    elif not product_ok and not doc_ok:
+        # Оба не совпали — ошибка
+        return f"❌ Документ не соответствует заказу!"
+    
     else:
-        # ❌ Оба не совпали
-        return f"❌ Документ не соответствует заказу: изделие «{found_product}» vs «{order_product}», номер «{doc_number}»"
+        # Частичное совпадение — предупреждение
+        return f"⚠️ Документ частично не совпадает. Перепроверьте!"
+    
+    return None
 
 
 def process_document_scan(file_path: str, expected_type: str, order_id_str: str) -> dict:
-    """
-    Общая функция обработки документа (ГЧ, Г3, ПГ3).
-    Возвращает dict с результатом или ошибкой.
-    """
     from app.patterns import detect_document_type, extract_product_name
-
+    
     # 1. Распознаём текст
     result = scan_document(file_path)
     full_text = result.get("full_text", "")
-
+    
     # 2. Определяем тип и номер документа
     doc_info = detect_document_type(full_text)
     doc_type = doc_info["type"]
     doc_number = doc_info["number"]
-
-    # 3. Проверяем тип
+    
+    # 3. Извлекаем изделие
+    found_product = extract_product_name(full_text)
+    
+    # 4. Проверяем тип
     type_names = {
         "ГЧ": "габаритный чертёж",
         "Г3": "гидравлическую схему",
         "ПГ3": "перечень элементов",
     }
-
-    if doc_type != expected_type:
-        if doc_type == "неизвестный":
+    
+    # Если тип определён, но не тот — ошибка
+    if doc_type is not None and doc_type != expected_type:
+        return {
+            "status": "error",
+            "message": f"❌ Это {doc_type}, а ожидается {expected_type}! Сфотографируйте {type_names.get(expected_type, 'документ')}."
+        }
+    
+    # Если тип не определён и номер не найден
+    if doc_type is None and doc_number == "НЕ НАЙДЕНО":
+        if found_product != "НЕ НАЙДЕНО":
+            # Изделие найдено, но тип и номер не определены — спрашиваем
             return {
-                "status": "error",
-                "message": f"❌ Не удалось распознать номер документа! Сфотографируйте {type_names.get(expected_type, 'документ')}."
+                "status": "warning",
+                "message": f"⚠️ Найдено изделие «{found_product}», но номер документа не распознан. Похоже на {expected_type}?",
+                "doc_number": "НЕ НАЙДЕНО",
+                "found_product": found_product,
+                "full_text": full_text,
             }
         else:
             return {
                 "status": "error",
-                "message": f"❌ Это {doc_type}, а ожидается {expected_type}! Сфотографируйте {type_names.get(expected_type, 'документ')}."
+                "message": f"❌ Не удалось распознать документ! Сфотографируйте {type_names.get(expected_type, 'документ')}."
             }
-
-    # 4. Извлекаем изделие
-    found_product = extract_product_name(full_text)
-
+    
     # 5. Проверяем соответствие заказу
     if order_id_str:
-        product_error = check_document_match(
-            order_id_str, found_product, doc_number)
+        product_error = check_document_match(order_id_str, found_product, doc_number)
         if product_error:
             if product_error.startswith("⚠️"):
                 return {
@@ -185,13 +199,14 @@ def process_document_scan(file_path: str, expected_type: str, order_id_str: str)
                     "message": product_error,
                     "doc_number": doc_number,
                     "found_product": found_product,
+                    "full_text": full_text,
                 }
             else:
                 return {
                     "status": "error",
                     "message": product_error
                 }
-
+    
     return {
         "status": "ok",
         "doc_number": doc_number,

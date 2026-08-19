@@ -226,6 +226,7 @@
             fetch(url, { method: 'POST', body: formData })
                 .then(res => res.json())
                 .then(data => {
+                    console.log('Ответ сервера:', data);
                     if (data.status === 'error') {
                         alert(data.message);
                         scanAnimation.style.display = 'none';
@@ -233,6 +234,7 @@
                     }
                     
                     if (data.status === 'warning') {
+                        console.log('Warning:', data.message);
                         const userConfirmed = confirm(
                             data.message + '\n\n' +
                             'Нажмите "OK" — если это правильный документ (OCR ошибся).\n' +

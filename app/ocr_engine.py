@@ -158,7 +158,11 @@ def scan_document(image_path: str) -> dict:
     except (KeyError, IndexError) as e:
         print(f"ОШИБКА ПАРСИНГА: {e}")
         recognized_text = ""
-
+    # ВЫВОД РАСПОЗНАННОГО ТЕКСТА
+    print("=" * 60)
+    print("РАСПОЗНАНО:")
+    print(recognized_text if recognized_text else "ПУСТО")
+    print("=" * 60)
     if not recognized_text.strip():
         return {
             "order_number": "ОШИБКА API",

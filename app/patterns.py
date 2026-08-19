@@ -4,25 +4,25 @@ import re
 # Номер заказа на производство
 ORDER_NUMBER_PATTERN = r"ПС\d{2}[.\-]\d{2,4}[.\-]\d{1,2}(?:[.\-]\d{1,3})?"
 
-# Номер документа ГЧ (или СБ)
-GCH_NUMBER_PATTERN = r"([A-ZА-Я0-9]{1,3}[.\-]\d{1,4}[.\-]\d{3,4}[.\-]\d{3,4}(?:[.\-]\d{1,3})?\s*(?:ГЧ|СБ))"
+# Любой номер документа
+ANY_DOC_PATTERN = r"([A-ZА-Я]+(?:[.\-]?[A-ZА-Я0-9]+)*[.\-\s]?\d{3,4}[.\-\s]\d{3,4}(?:[.\-\s]\d{1,3})?\s*(?:ГЧ|СБ|Г[3З]|ПГ[3З]))"
 
-# Номер документа Г3
-G3_NUMBER_PATTERN = r"([A-ZА-Я0-9]{1,3}[.\-]\d{1,4}[.\-]\d{3,4}[.\-]\d{3,4}(?:[.\-]\d{1,3})?\s*Г[3З])"
+# ГЧ
+GCH_NUMBER_PATTERN = r"([A-ZА-Я]+(?:[.\-]?[A-ZА-Я0-9]+)*[.\-\s]?\d{3,4}[.\-\s]\d{3,4}(?:[.\-\s]\d{1,3})?\s*(?:ГЧ|СБ))"
 
-# Номер документа ПГ3
-PG3_NUMBER_PATTERN = r"([A-ZА-Я0-9]{1,3}[.\-]\d{1,4}[.\-]\d{3,4}[.\-]\d{3,4}(?:[.\-]\d{1,3})?\s*ПГ[3З])"
+# Г3
+G3_NUMBER_PATTERN = r"([A-ZА-Я]+(?:[.\-]?[A-ZА-Я0-9]+)*[.\-\s]?\d{3,4}[.\-\s]\d{3,4}(?:[.\-\s]\d{1,3})?\s*Г[3З])"
 
-# Любой номер документа (для определения типа)
-ANY_DOC_PATTERN = r"([A-ZА-Я0-9]{1,3}[.\-]\d{1,4}[.\-]\d{3,4}[.\-]\d{3,4}(?:[.\-]\d{1,3})?\s*(?:ГЧ|СБ|Г[3З]|ПГ[3З]))"
+# ПГ3
+PG3_NUMBER_PATTERN = r"([A-ZА-Я]+(?:[.\-]?[A-ZА-Я0-9]+)*[.\-\s]?\d{3,4}[.\-\s]\d{3,4}(?:[.\-\s]\d{1,3})?\s*ПГ[3З])"
 
 # Изделие (разные префиксы)
 PRODUCT_PATTERNS = [
-    r"CTR[.\-\s]?KV[.\-\s]?[A-ZА-Я0-9.\-]+",
-    r"PM[.\-\s]?[A-ZА-Я0-9.\-]+",
-    r"BLKV[.\-\s]?[A-ZА-Я0-9.\-]+",
-    r"PNKV[.\-\s]?[A-ZА-Я0-9.\-]+",
-    r"PPC[.\-\s]?[A-ZА-Я0-9.\-]+",
+    r"CTR[.\-\s]?KV[.\-\s]?[A-ZА-Я0-9]+(?:[.\-][A-ZА-Я0-9]+)*",
+    r"PM[.\-\s]?[A-ZА-Я0-9]+(?:[.\-][A-ZА-Я0-9]+)*",
+    r"BLKV[.\-\s]?[A-ZА-Я0-9]+(?:[.\-][A-ZА-Я0-9]+)*",
+    r"PNKV[.\-\s]?[A-ZА-Я0-9]+(?:[.\-][A-ZА-Я0-9]+)*",
+    r"PPC[.\-\s]?KV[.\-\s]?[A-ZА-Я0-9]+(?:[.\-][A-ZА-Я0-9]+)*",
 ]
 
 
@@ -52,37 +52,76 @@ def extract_pg3_number(text: str) -> str:
 
 def extract_product_name(text: str) -> str:
     """Извлекает название изделия из текста."""
+    # Сначала ищем в строке "Изделие:"
+    product_match = re.search(
+        r"Изделие\s*:?\s*\n?\s*([A-ZА-Я0-9][A-ZА-Я0-9.\-]*)",
+        text, re.IGNORECASE
+    )
+    if product_match:
+        candidate = product_match.group(1).strip()
+        # Отрезаем часть с ".000.000" если это номер документа
+        candidate = re.sub(r'\.\d{3,4}\.\d{3,4}.*$', '', candidate)
+        if candidate:
+            return candidate.strip()
+    
+    # Запасной: ищем по паттернам изделий
     for pattern in PRODUCT_PATTERNS:
         match = re.search(pattern, text, re.IGNORECASE)
         if match:
-            return match.group(0).strip()
+            result = match.group(0).strip()
+            # Отрезаем ".000.000" если есть
+            result = re.sub(r'\.\d{3,4}\.\d{3,4}.*$', '', result)
+            return result
+    
     return "НЕ НАЙДЕНО"
 
 
 def detect_document_type(text: str) -> dict:
-    """
-    Определяет тип документа по распознанному тексту.
-    Возвращает: {"type": "ГЧ"|"Г3"|"ПГ3"|"неизвестный", "number": "номер документа"}
-    """
-    # Ищем любой номер документа
+    """Определяет тип документа по распознанному тексту."""
+    
+    # 1. Ищем тип по словам
+    if re.search(r'Сборочный\s+чертёж', text, re.IGNORECASE):
+        doc_type = "ГЧ"
+    elif re.search(r'Габаритный\s+чертёж', text, re.IGNORECASE):
+        doc_type = "ГЧ"
+    elif re.search(r'Перечень\s+элементов', text, re.IGNORECASE):
+        doc_type = "ПГ3"
+    elif re.search(r'Схема\s+гидравлическая', text, re.IGNORECASE):
+        doc_type = "Г3"
+    else:
+        doc_type = None  # ← None вместо "неизвестный"
+    
+    # 2. Ищем номер документа с суффиксом
     any_doc_match = re.search(ANY_DOC_PATTERN, text, re.IGNORECASE)
     
-    if not any_doc_match:
-        return {"type": "неизвестный", "number": "НЕ НАЙДЕНО"}
+    if any_doc_match:
+        doc_full = any_doc_match.group(0).strip()
+        doc_number = any_doc_match.group(1).strip()
+        
+        # Определяем тип по суффиксу
+        if re.search(r'ПГ[3З]', doc_full, re.IGNORECASE):
+            suffix_type = "ПГ3"
+        elif re.search(r'ГЧ|СБ', doc_full, re.IGNORECASE):
+            suffix_type = "ГЧ"
+        elif re.search(r'Г[3З]', doc_full, re.IGNORECASE):
+            suffix_type = "Г3"
+        else:
+            suffix_type = None
+        
+        # Если тип по словам не найден, но суффикс есть
+        if doc_type is None and suffix_type:
+            doc_type = suffix_type
+        
+        return {"type": doc_type, "number": doc_number}
     
-    doc_full = any_doc_match.group(0).strip()
-    doc_number = any_doc_match.group(1).strip()
+    # 3. Ищем номер без суффикса
+    doc_match = re.search(
+        r'([A-ZА-Я]+(?:[.\-]?[A-ZА-Я0-9]+)*[.\-\s]?\d{3,4}[.\-\s]\d{3,4}(?:[.\-\s]\d{1,3})?)',
+        text, re.IGNORECASE
+    )
     
-    # Определяем тип по суффиксу
-    if re.search(r'ПГ[3З]', doc_full, re.IGNORECASE):
-        doc_type = "ПГ3"
-        doc_number = doc_number.replace('ПГЗ', 'ПГ3')
-    elif re.search(r'ГЧ|СБ', doc_full, re.IGNORECASE):
-        doc_type = "ГЧ"
-    elif re.search(r'Г[3З]', doc_full, re.IGNORECASE):
-        doc_type = "Г3"
-        doc_number = doc_number.replace('ГЗ', 'Г3')
-    else:
-        doc_type = "неизвестный"
+    if doc_match:
+        doc_number = doc_match.group(1).strip()
+        return {"type": doc_type, "number": doc_number}
     
-    return {"type": doc_type, "number": doc_number}
+    return {"type": doc_type, "number": "НЕ НАЙДЕНО"}
