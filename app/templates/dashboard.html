@@ -157,7 +157,7 @@
                     <td>
                         {% if order.is_completed %}
                         <a href="/protocol?order_id={{ order.id }}" class="btn-action btn-protocol">Протокол</a>
-                        <a href="/shild?order_id={{ order.id }}" class="btn-action btn-shild">Шильдик</a>
+                        <a href="javascript:void(0)" onclick="openShildikModal({{ order.id }})" class="btn-action btn-shild">Шильдик</a>
                         {% if order.photos %}
                         <a href="/photo?order_id={{ order.id }}" class="btn-action btn-photo">Фото ({{ order.photos | length }})</a>
                         {% endif %}
@@ -181,4 +181,40 @@
     </div>
     {% endif %}
 </div>
+{% endblock %}
+{% block extra_js %}
+<!-- Модалка шильдика -->
+<div id="shildikModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 9999; justify-content: center; align-items: center;" onclick="closeShildikModal()">
+    <div style="position: relative; display: inline-block;" onclick="event.stopPropagation();">
+        <!-- Крестик закрытия -->
+        <button onclick="closeShildikModal()" style="position: absolute; top: -12px; right: -12px; width: 30px; height: 30px; background: #f44336; color: #fff; border: 2px solid #fff; border-radius: 50%; cursor: pointer; font-size: 16px; line-height: 1; z-index: 10;">✕</button>
+        
+        <!-- Шильдик -->
+        <img id="shildikImage" src="" alt="Шильдик" style="width: 75mm; height: 50mm; display: block; border-radius: 4px; background: #fff;">
+        
+        <!-- Кнопка печати -->
+        <button onclick="printShildik()" style="position: absolute; bottom: -12px; right: -12px; width: 30px; height: 30px; background: #4caf50; color: #fff; border: 2px solid #fff; border-radius: 50%; cursor: pointer; font-size: 16px; line-height: 1; z-index: 10;">🖨️</button>
+    </div>
+</div>
+
+<script>
+    function openShildikModal(orderId) {
+        document.getElementById('shildikImage').src = '/shildik/svg?order_id=' + orderId;
+        document.getElementById('shildikModal').style.display = 'flex';
+    }
+    
+    function closeShildikModal() {
+        document.getElementById('shildikModal').style.display = 'none';
+    }
+    
+    function printShildik() {
+        const img = document.getElementById('shildikImage');
+        const printWindow = window.open('', '_blank');
+        printWindow.document.write('<html><head><title>Шильдик</title></head><body style="margin:0; display:flex; justify-content:center; align-items:center;">');
+        printWindow.document.write('<img src="' + img.src + '" style="width:75mm; height:50mm;">');
+        printWindow.document.write('</body></html>');
+        printWindow.document.close();
+        printWindow.print();
+    }
+</script>
 {% endblock %}

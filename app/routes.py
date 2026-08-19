@@ -1322,3 +1322,91 @@ def delete_order_route(request: Request, order_id: int):
     delete_order(order_id)
 
     return RedirectResponse("/dashboard", status_code=303)
+
+# ── Страница шильдика ─────────────────────────────
+@router.get("/shildik")
+def shildik_page(request: Request):
+    user = get_current_user(request)
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+    
+    order_id = request.query_params.get("order_id", None)
+    order_data = None
+    serial_number = ""
+    test_date = ""
+    
+    if order_id:
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM orders WHERE id = ?", (int(order_id),))
+        row = cursor.fetchone()
+        order_data = dict(row) if row else None
+        conn.close()
+        
+        if order_data:
+            from datetime import datetime
+            import re as re_module
+            
+            test_date = datetime.now().strftime("%d.%m.%Y")
+            
+            order_num = order_data.get("order_number", "")
+            match = re_module.search(r"ПС\d{2}[.\-](\d+)", order_num)
+            if match:
+                first_digits = match.group(1)[:4].zfill(4)
+            else:
+                first_digits = "0000"
+            
+            date_part = datetime.now().strftime("%d%m%y")
+            serial_number = f"{first_digits}{date_part}01"
+    
+    return templates.TemplateResponse("shildik.html", {
+        "request": request,
+        "order": order_data,
+        "serial_number": serial_number,
+        "test_date": test_date,
+        "user": user,
+    })
+
+@router.get("/shildik/svg")
+def shildik_svg(request: Request):
+    from fastapi.responses import Response
+    
+    order_id = request.query_params.get("order_id", None)
+    if not order_id:
+        return Response(content="Ошибка: нет order_id", media_type="text/plain")
+    
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM orders WHERE id = ?", (int(order_id),))
+    row = cursor.fetchone()
+    conn.close()
+    
+    if not row:
+        return Response(content="Ошибка: заказ не найден", media_type="text/plain")
+    
+    order_data = dict(row)
+    
+    from datetime import datetime
+    import re as re_module
+    
+    test_date = datetime.now().strftime("%d.%m.%Y")
+    
+    order_num = order_data.get("order_number", "")
+    match = re_module.search(r"ПС\d{2}[.\-](\d+)", order_num)
+    if match:
+        first_digits = match.group(1)[:4].zfill(4)
+    else:
+        first_digits = "0000"
+    
+    date_part = datetime.now().strftime("%d%m%y")
+    serial_number = f"{first_digits}{date_part}01"
+    
+    from app.shildik_generator import generate_shildik_svg
+    svg = generate_shildik_svg(
+        product_name=order_data.get("product_name", ""),
+        serial_number=serial_number,
+        test_date=test_date,
+        order_number=order_data.get("order_number", "")
+    )
+    
+    return Response(content=svg, media_type="image/svg+xml")

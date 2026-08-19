@@ -1,0 +1,41 @@
+<!-- ========== shildik.html ========== -->
+{% extends "base.html" %}
+
+{% block title %}Шильдик — ОТК{% endblock %}
+
+{% block extra_css %}
+<style>
+    .shildik-container {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        margin: 20px auto;
+        max-width: 100%;
+    }
+    .shildik-container img {
+        width: 75mm;
+        height: 50mm;
+        border: 1px solid #3a3d45;
+        border-radius: 4px;
+        display: block;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-container">
+    <div class="page-header">
+        <h1>🏷️ Шильдик изделия</h1>
+    </div>
+
+    {% if order %}
+    <div class="shildik-container">
+        <img src="/shildik/svg?order_id={{ order.id }}" alt="Шильдик">
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <p>Заказ не найден</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
