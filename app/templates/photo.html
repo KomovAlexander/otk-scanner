@@ -16,41 +16,69 @@
         background: #1e2128;
         border: 2px dashed #3a3d45;
         border-radius: 12px;
-        padding: 20px;
+        padding: 16px;
         text-align: center;
         transition: border 0.3s;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 8px;
     }
     .photo-card.completed {
         border-color: #4caf50;
         background: #1e3a1e;
     }
-    .photo-card .icon {
-        font-size: 40px;
-        margin-bottom: 8px;
-    }
     .photo-card .title {
-        font-size: 15px;
+        font-size: 14px;
         font-weight: 600;
-        color: #fff;
-        margin-bottom: 12px;
+        color: #e0e0e0;
+        margin: 0;
+    }
+    .photo-wrapper {
+        position: relative;
+        display: inline-block;
+        max-width: 100%;
+        width: 100%;
     }
     .photo-card img {
-        max-width: 100%;
-        max-height: 200px;
+        width: 100%;
+        height: 200px;
         border-radius: 8px;
-        margin-bottom: 8px;
+        margin: 0 auto;
+        display: block;
+        object-fit: cover;
+        cursor: pointer;
     }
-    .photo-card .btn-capture {
+    .btn-recapture {
+        position: absolute;
+        top: 6px;
+        right: 6px;
+        width: 28px;
+        height: 28px;
+        background: rgba(0, 0, 0, 0.6);
+        color: #fff;
+        border: 2px solid #fff;
+        border-radius: 50%;
+        cursor: pointer;
+        font-size: 14px;
+        line-height: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0;
+    }
+    .btn-recapture:hover { background: rgba(255, 107, 53, 0.9); }
+    .btn-capture {
         padding: 10px 20px;
         background: #ff6b35;
         color: #fff;
         border: none;
-        border-radius: 8px;
+        border-radius: 6px;
         cursor: pointer;
         font-size: 14px;
     }
-    .photo-card .btn-capture:hover { background: #e55a2b; }
-    .photo-card .btn-capture:disabled { background: #555; cursor: not-allowed; }
+    .btn-capture:hover { background: #e55a2b; }
+    .btn-capture:disabled { background: #555; cursor: not-allowed; }
     .btn-add-photo {
         padding: 14px;
         background: #4caf50;
@@ -82,61 +110,50 @@
     </div>
 
     <div class="photo-grid" id="photoGrid">
-        <!-- Фото 1 -->
-        <div class="photo-card {% if photos and photos|length >= 1 %}completed{% endif %}" id="photoCard1">
-            <div class="icon">📷</div>
-            <div class="title">Вид спереди</div>
-            {% if photos and photos|length >= 1 %}
-            <img src="{{ photos[0] }}" style="display:block;" class="zoomable">
-            <button class="btn-capture" onclick="takePhoto(1)">📷 Переснять</button>
-            {% else %}
-            <img id="preview1" style="display:none;">
-            <button class="btn-capture" id="btn1" onclick="takePhoto(1)">Сделать фото</button>
-            {% endif %}
-            <input type="file" id="file1" accept="image/*" capture="environment" hidden>
-        </div>
-
-        <!-- Фото 2 -->
-        <div class="photo-card {% if photos and photos|length >= 2 %}completed{% endif %}" id="photoCard2">
-            <div class="icon">📷</div>
-            <div class="title">Вид справа</div>
-            {% if photos and photos|length >= 2 %}
-            <img src="{{ photos[1] }}" style="display:block;">
-            <button class="btn-capture" onclick="takePhoto(2)">📷 Переснять</button>
-            {% else %}
-            <img id="preview2" style="display:none;">
-            <button class="btn-capture" id="btn2" onclick="takePhoto(2)">Сделать фото</button>
-            {% endif %}
-            <input type="file" id="file2" accept="image/*" capture="environment" hidden>
-        </div>
-
-        <!-- Фото 3 -->
-        <div class="photo-card {% if photos and photos|length >= 3 %}completed{% endif %}" id="photoCard3">
-            <div class="icon">📷</div>
-            <div class="title">Вид сзади</div>
-            {% if photos and photos|length >= 3 %}
-            <img src="{{ photos[2] }}" style="display:block;">
-            <button class="btn-capture" onclick="takePhoto(3)">📷 Переснять</button>
-            {% else %}
-            <img id="preview3" style="display:none;">
-            <button class="btn-capture" id="btn3" onclick="takePhoto(3)">Сделать фото</button>
-            {% endif %}
-            <input type="file" id="file3" accept="image/*" capture="environment" hidden>
-        </div>
-
-        <!-- Фото 4 -->
-        <div class="photo-card {% if photos and photos|length >= 4 %}completed{% endif %}" id="photoCard4">
-            <div class="icon">📷</div>
-            <div class="title">Вид слева</div>
-            {% if photos and photos|length >= 4 %}
-            <img src="{{ photos[3] }}" style="display:block;">
-            <button class="btn-capture" onclick="takePhoto(4)">📷 Переснять</button>
-            {% else %}
-            <img id="preview4" style="display:none;">
-            <button class="btn-capture" id="btn4" onclick="takePhoto(4)">Сделать фото</button>
-            {% endif %}
-            <input type="file" id="file4" accept="image/*" capture="environment" hidden>
-        </div>
+        {% if photos %}
+            {% for photo in photos %}
+            <div class="photo-card completed" id="photoCard{{ loop.index }}">
+                <div class="title">
+                    {% if loop.index == 1 %}Вид спереди
+                    {% elif loop.index == 2 %}Вид справа
+                    {% elif loop.index == 3 %}Вид сзади
+                    {% elif loop.index == 4 %}Вид слева
+                    {% else %}Фото {{ loop.index }}
+                    {% endif %}
+                </div>
+                <div class="photo-wrapper">
+                    <img src="{{ photo }}" style="display:block;">
+                    <button class="btn-recapture" onclick="takePhoto({{ loop.index }})" title="Переснять">📷</button>
+                </div>
+                <input type="file" id="file{{ loop.index }}" accept="image/*" capture="environment" hidden>
+            </div>
+            {% endfor %}
+        {% else %}
+            <div class="photo-card" id="photoCard1">
+                <div class="title">Вид спереди</div>
+                <img id="preview1" style="display:none;">
+                <button class="btn-capture" id="btn1" onclick="takePhoto(1)">Сделать фото</button>
+                <input type="file" id="file1" accept="image/*" capture="environment" hidden>
+            </div>
+            <div class="photo-card" id="photoCard2">
+                <div class="title">Вид справа</div>
+                <img id="preview2" style="display:none;">
+                <button class="btn-capture" id="btn2" onclick="takePhoto(2)">Сделать фото</button>
+                <input type="file" id="file2" accept="image/*" capture="environment" hidden>
+            </div>
+            <div class="photo-card" id="photoCard3">
+                <div class="title">Вид сзади</div>
+                <img id="preview3" style="display:none;">
+                <button class="btn-capture" id="btn3" onclick="takePhoto(3)">Сделать фото</button>
+                <input type="file" id="file3" accept="image/*" capture="environment" hidden>
+            </div>
+            <div class="photo-card" id="photoCard4">
+                <div class="title">Вид слева</div>
+                <img id="preview4" style="display:none;">
+                <button class="btn-capture" id="btn4" onclick="takePhoto(4)">Сделать фото</button>
+                <input type="file" id="file4" accept="image/*" capture="environment" hidden>
+            </div>
+        {% endif %}
     </div>
 
     <button class="btn-add-photo" id="btnAddPhoto" onclick="addPhoto()">Добавить ещё фото</button>
@@ -147,9 +164,8 @@
 {% block extra_js %}
 <script>
     let photosTaken = {};
-    let photoCount = 4;
+    let photoCount = {% if photos %}{{ photos|length }}{% else %}4{% endif %};
 
-    // Инициализируем photosTaken из существующих фото
     {% if photos %}
     {% for photo in photos %}
     photosTaken[{{ loop.index }}] = true;
@@ -167,7 +183,6 @@
         card.className = 'photo-card';
         card.id = 'photoCard' + photoCount;
         card.innerHTML = `
-            <div class="icon">📷</div>
             <div class="title">Фото ${photoCount}</div>
             <img id="preview${photoCount}" style="display:none;">
             <input type="file" id="file${photoCount}" accept="image/*" capture="environment" hidden>
@@ -187,7 +202,6 @@
         
         const reader = new FileReader();
         reader.onload = (e) => {
-            // Обновляем превью
             let preview = document.getElementById('preview' + index);
             if (!preview) {
                 preview = document.createElement('img');
@@ -200,10 +214,21 @@
             const card = document.getElementById('photoCard' + index);
             card.classList.add('completed');
             
-            // Обновляем кнопку
-            const btn = card.querySelector('.btn-capture');
-            btn.textContent = '📷 Переснять';
-            btn.disabled = false;
+            // Скрываем кнопку "Сделать фото" и добавляем кружок переснять
+            const oldBtn = card.querySelector('.btn-capture');
+            if (oldBtn) {
+                oldBtn.style.display = 'none';
+                const wrapper = document.createElement('div');
+                wrapper.className = 'photo-wrapper';
+                wrapper.appendChild(preview);
+                const recaptureBtn = document.createElement('button');
+                recaptureBtn.className = 'btn-recapture';
+                recaptureBtn.innerHTML = '📷';
+                recaptureBtn.title = 'Переснять';
+                recaptureBtn.onclick = () => takePhoto(index);
+                wrapper.appendChild(recaptureBtn);
+                card.insertBefore(wrapper, input);
+            }
             
             photosTaken[index] = true;
             
@@ -238,9 +263,14 @@
         window.location.href = '/protocol?' + params.toString();
     }
 
-    // Привязываем обработчики к первым 4 фото
+    {% if photos %}
+    for (let i = 1; i <= {{ photos|length }}; i++) {
+        document.getElementById('file' + i).addEventListener('change', handleFile);
+    }
+    {% else %}
     for (let i = 1; i <= 4; i++) {
         document.getElementById('file' + i).addEventListener('change', handleFile);
     }
+    {% endif %}
 </script>
 {% endblock %}

@@ -71,7 +71,8 @@
 
     @media print {
         body { background: #fff; color: #000; }
-        .progress-bar, .btn-print { display: none; }
+        .top-bar, .progress-bar { display: none !important; }
+        .btn-print, .btn-next { display: none !important; }
         .protocol-header { background: #fff; border: 2px solid #000; color: #000; }
         .protocol-header h1 { color: #000; }
         .protocol-header .product-name { color: #000; }
@@ -89,6 +90,7 @@
         .result-warn { color: #000; }
         .signature-line { border-color: #000; }
         .signature-label { color: #000; }
+    }
     }
 </style>
 {% endblock %}
