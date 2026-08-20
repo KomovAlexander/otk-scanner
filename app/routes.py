@@ -86,7 +86,17 @@ def check_document_match(order_id: str, found_product: str, doc_number: str) -> 
     order_product = row["product_name"]
 
     def normalize(s: str) -> str:
-        return s.upper().replace("-", "").replace(" ", "").replace(".", "")
+        s = s.upper()
+        # Заменяем кириллицу на латиницу
+        replacements = {
+            'А': 'A', 'В': 'B', 'Е': 'E', 'К': 'K', 'М': 'M',
+            'Н': 'H', 'О': 'O', 'Р': 'P', 'С': 'C', 'Т': 'T',
+            'У': 'Y', 'Х': 'X', 'З': '3',
+        }
+        for cyr, lat in replacements.items():
+            s = s.replace(cyr, lat)
+        s = s.replace("-", "").replace(" ", "").replace(".", "")
+        return s
 
     # Проверяем изделие
     product_found = False
@@ -515,7 +525,6 @@ def check_gch_page(request: Request):
     })
 
 
-# ── Эндпоинт приёма фото ГЧ ───────────────────────
 @router.post("/api/scan-gch")
 async def api_scan_gch(request: Request, file: UploadFile = File(...)):
     user = get_current_user(request)
@@ -536,15 +545,15 @@ async def api_scan_gch(request: Request, file: UploadFile = File(...)):
     # Общая обработка
     result = process_document_scan(file_path, "ГЧ", order_id_str)
     
-    if result["status"] in ("error", "warning"):
+    if result["status"] == "error":
         return JSONResponse(content=result)
     
-    full_text = result["full_text"]
-    gch_number = result["doc_number"]
-    found_product = result["found_product"]
+    # Продолжаем при "ok" и "warning"
+    full_text = result.get("full_text", "")
+    gch_number = result.get("doc_number", "НЕ НАЙДЕНО")
+    found_product = result.get("found_product", "НЕ НАЙДЕНО")
     
     # Извлекаем RAL и размеры
-    import re
     ral_match = re.search(r"RAL\s*(\d{4})", full_text, re.IGNORECASE)
     ral = ral_match.group(1).strip() if ral_match else ""
     
@@ -564,7 +573,8 @@ async def api_scan_gch(request: Request, file: UploadFile = File(...)):
             shutil.copyfileobj(src, dst)
     
     return JSONResponse(content={
-        "status": "ok",
+        "status": result["status"],
+        "message": result.get("message", ""),
         "gch_number": gch_number,
         "found_product": found_product,
         "ral": ral,
@@ -663,12 +673,13 @@ async def api_scan_g3(request: Request, file: UploadFile = File(...)):
     # Общая обработка
     result = process_document_scan(file_path, "Г3", order_id_str)
     
-    if result["status"] in ("error", "warning"):
+    if result["status"] == "error":
         return JSONResponse(content=result)
     
-    full_text = result["full_text"]
-    g3_number = result["doc_number"]
-    found_product = result["found_product"]
+    # Продолжаем при "ok" и "warning"
+    full_text = result.get("full_text", "")
+    g3_number = result.get("doc_number", "НЕ НАЙДЕНО")
+    found_product = result.get("found_product", "НЕ НАЙДЕНО")
     
     # Извлекаем параметры
     from app.param_extractor import extract_params_via_gpt
@@ -687,13 +698,13 @@ async def api_scan_g3(request: Request, file: UploadFile = File(...)):
             shutil.copyfileobj(src, dst)
     
     return JSONResponse(content={
-        "status": "ok",
+        "status": result["status"],
+        "message": result.get("message", ""),
         "g3_number": g3_number,
         "found_product": found_product,
         "params": params,
         "count": len(params),
     })
-
 
 # ── Эндпоинт ручного сохранения Г3 ─────────────────
 @router.post("/api/save-g3")
@@ -784,12 +795,13 @@ async def api_scan_pg3(request: Request, file: UploadFile = File(...)):
     # Общая обработка
     result = process_document_scan(file_path, "ПГ3", order_id_str)
     
-    if result["status"] in ("error", "warning"):
+    if result["status"] == "error":
         return JSONResponse(content=result)
     
-    full_text = result["full_text"]
-    pg3_number = result["doc_number"]
-    found_product = result["found_product"]
+    # Продолжаем при "ok" и "warning"
+    full_text = result.get("full_text", "")
+    pg3_number = result.get("doc_number", "НЕ НАЙДЕНО")
+    found_product = result.get("found_product", "НЕ НАЙДЕНО")
     
     # Извлекаем позиции
     from app.param_extractor import extract_pg3_via_gpt
@@ -808,7 +820,8 @@ async def api_scan_pg3(request: Request, file: UploadFile = File(...)):
             shutil.copyfileobj(src, dst)
     
     return JSONResponse(content={
-        "status": "ok",
+        "status": result["status"],
+        "message": result.get("message", ""),
         "pg3_number": pg3_number,
         "found_product": found_product,
         "items": items,
