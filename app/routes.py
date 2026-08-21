@@ -68,6 +68,14 @@ def get_saved_file_path(order_id: int, doc_type: str) -> str | None:
             return f"/uploads/order_{order_id}/{file_name}"
     return None
 
+def handle_gpt_error(e: Exception) -> JSONResponse:
+    """Общий обработчик ошибок GPT."""
+    print(f"GPT error: {e}")
+    return JSONResponse(content={
+        "status": "error",
+        "message": "⚠️ Сервис распознавания временно недоступен. Попробуйте позже или заполните данные вручную."
+    })
+
 
 def check_document_match(order_id: str, found_product: str, doc_number: str) -> str | None:
     """Проверяет, что документ соответствует заказу по изделию и номеру."""
@@ -683,7 +691,10 @@ async def api_scan_g3(request: Request, file: UploadFile = File(...)):
     
     # Извлекаем параметры
     from app.param_extractor import extract_params_via_gpt
-    params = extract_params_via_gpt(full_text, found_product)
+    try:
+        params = extract_params_via_gpt(full_text, found_product)
+    except Exception as e:
+        return handle_gpt_error(e)
     
     # Сохраняем
     if order_id_str:
@@ -805,7 +816,10 @@ async def api_scan_pg3(request: Request, file: UploadFile = File(...)):
     
     # Извлекаем позиции
     from app.param_extractor import extract_pg3_via_gpt
-    items = extract_pg3_via_gpt(full_text, found_product)
+    try:
+        items = extract_pg3_via_gpt(full_text, found_product)
+    except Exception as e:
+        return handle_gpt_error(e)
     
     # Сохраняем
     if order_id_str:

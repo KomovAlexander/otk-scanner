@@ -538,11 +538,15 @@
         }
 
         document.querySelectorAll('.check-select').forEach(select => {
+            // Пропускаем matchGCH — у него своя обработка
+            if (select.id === 'matchGCH') return;
+            
+            const name = select.dataset.name || select.id || 'Параметр';
             if (!select.value) {
-                deviations.push(`⚙️ ${select.dataset.name}: не указано`);
+                deviations.push(`⚙️ ${name}: не указано`);
             } else if (select.value === 'no') {
                 const comment = select.parentElement.querySelector('textarea')?.value || '';
-                deviations.push(`⚙️ ${select.dataset.name}: не соответствует${comment ? ' — ' + comment : ''}`);
+                deviations.push(`⚙️ ${name}: не соответствует${comment ? ' — ' + comment : ''}`);
             }
         });
         
@@ -592,6 +596,10 @@
 
     async function autoSave() {
         if (isRestoring) return;
+        
+        // Пересчитываем deviations перед сохранением
+        updateDeviations();
+        
         const params = new URLSearchParams(window.location.search);
         const orderId = params.get('order_id');
         if (!orderId) return;
@@ -602,7 +610,7 @@
             sizes: Array.from(document.querySelectorAll('.size-input')).map(input => input.value.trim()),
             ral: document.getElementById('ralInput')?.value || '',
             mass: document.getElementById('massInput')?.value || '',
-            g3_checks: Array.from(document.querySelectorAll('.check-select')).map(select => ({
+            g3_checks: Array.from(document.querySelectorAll('.check-select')).filter(s => s.id !== 'matchGCH').map(select => ({
                 name: select.dataset.name,
                 value: select.value,
                 comment: select.parentElement.querySelector('textarea')?.value || ''
@@ -616,7 +624,6 @@
                 position: cb.dataset.position,
                 confirmed: cb.checked
             })),
-            // Сохраняем изменённые позиции ПГ3
             pg3_changes: Array.from(document.querySelectorAll('.pg3-name')).map(input => {
                 const row = input.closest('tr');
                 return {
@@ -727,7 +734,6 @@
     });
 
     // Загрузка сохранённых данных из БД
-    // Загрузка сохранённых данных из БД
     (async function loadSavedData() {
         const params = new URLSearchParams(window.location.search);
         const orderId = params.get('order_id');
@@ -764,9 +770,11 @@
             }
             
             if (saved.g3_checks) {
-                document.querySelectorAll('.check-select').forEach((select, i) => {
-                    if (saved.g3_checks[i] && saved.g3_checks[i].value) {
-                        select.value = saved.g3_checks[i].value;
+                // Ищем select'ы по data-name (исключая matchGCH)
+                saved.g3_checks.forEach(check => {
+                    const select = document.querySelector(`.check-select[data-name="${check.name}"]`);
+                    if (select && check.value) {
+                        select.value = check.value;
                         select.dispatchEvent(new Event('change'));
                     }
                 });
