@@ -68,6 +68,7 @@ def get_saved_file_path(order_id: int, doc_type: str) -> str | None:
             return f"/uploads/order_{order_id}/{file_name}"
     return None
 
+
 def handle_gpt_error(e: Exception) -> JSONResponse:
     """Общий обработчик ошибок GPT."""
     print(f"GPT error: {e}")
@@ -84,7 +85,8 @@ def check_document_match(order_id: str, found_product: str, doc_number: str) -> 
 
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT product_name FROM orders WHERE id = ?", (int(order_id),))
+    cursor.execute(
+        "SELECT product_name FROM orders WHERE id = ?", (int(order_id),))
     row = cursor.fetchone()
     conn.close()
 
@@ -108,88 +110,81 @@ def check_document_match(order_id: str, found_product: str, doc_number: str) -> 
 
     # Проверяем изделие
     product_found = False
-    product_ok = False
+    product_exact = False
+    product_close = False
+
     if found_product and found_product != "НЕ НАЙДЕНО":
         product_found = True
         op = normalize(order_product)
         fp = normalize(found_product)
+
         if fp == op or fp in op or op in fp:
-            product_ok = True
+            product_exact = True
         elif levenshtein_distance(op, fp) <= 2:
-            product_ok = True
+            product_close = True  # Похоже, но не точно
 
     # Проверяем номер документа
     doc_found = False
-    doc_ok = False
+    doc_exact = False
+    doc_close = False
+
     if doc_number and doc_number != "НЕ НАЙДЕНО":
         doc_found = True
-        # Из номера документа обрезаем .000.000 и суффикс
-        doc_base = re.sub(r'[.\-\s]\d{3,4}[.\-\s]\d{3,4}.*$', '', doc_number.strip())
+        doc_base = re.sub(
+            r'[.\-\s]\d{3,4}[.\-\s]\d{3,4}.*$', '', doc_number.strip())
         doc_base = re.sub(r'\s*(?:ГЧ|СБ|Г[3З]|ПГ[3З])$', '', doc_base)
         doc_code = normalize(doc_base)
-        
-        # Нормализуем изделие
         product_code = normalize(order_product)
-        
-        if doc_code == product_code:
-            doc_ok = True
-        elif doc_code in product_code or product_code in doc_code:
-            doc_ok = True
-        elif levenshtein_distance(doc_code, product_code) <= 2:
-            doc_ok = True
 
-    # Итог — упрощённая версия
-    if product_ok and doc_ok:
-        return None  # ✅ Всё совпало
-    
+        if doc_code == product_code or doc_code in product_code or product_code in doc_code:
+            doc_exact = True
+        elif levenshtein_distance(doc_code, product_code) <= 2:
+            doc_close = True
+
+    # Итог
+    if (product_exact or product_close) and (doc_exact or doc_close):
+        if product_exact and doc_exact:
+            return None  # ✅ Точное совпадение
+        else:
+            # ⚠️ Похоже, но не точно — спрашиваем
+            return "⚠️ Документ похож, но есть расхождения. Точно ли это тот документ?"
     elif not doc_found:
-        # Номер не найден — предупреждаем, но пропускаем
-        return f"⚠️ Номер документа не распознан. Изделие: «{found_product}». Продолжить?"
-    
+        return "⚠️ Номер документа не распознан. Продолжить?"
     elif not product_found:
-        # Изделие не найдено — предупреждаем
-        return f"⚠️ Изделие не распознано. Номер документа: «{doc_number}». Продолжить?"
-    
-    elif not product_ok and not doc_ok:
-        # Оба не совпали — ошибка
-        return f"❌ Документ не соответствует заказу!"
-    
+        return "⚠️ Изделие не распознано. Продолжить?"
     else:
-        # Частичное совпадение — предупреждение
-        return f"⚠️ Документ частично не совпадает. Перепроверьте!"
-    
-    return None
+        return "❌ Документ не соответствует заказу!"
 
 
 def process_document_scan(file_path: str, expected_type: str, order_id_str: str) -> dict:
     from app.patterns import detect_document_type, extract_product_name
-    
+
     # 1. Распознаём текст
     result = scan_document(file_path)
     full_text = result.get("full_text", "")
-    
+
     # 2. Определяем тип и номер документа
     doc_info = detect_document_type(full_text)
     doc_type = doc_info["type"]
     doc_number = doc_info["number"]
-    
+
     # 3. Извлекаем изделие
     found_product = extract_product_name(full_text)
-    
+
     # 4. Проверяем тип
     type_names = {
         "ГЧ": "габаритный чертёж",
         "Г3": "гидравлическую схему",
         "ПГ3": "перечень элементов",
     }
-    
+
     # Если тип определён, но не тот — ошибка
     if doc_type is not None and doc_type != expected_type:
         return {
             "status": "error",
             "message": f"❌ Это {doc_type}, а ожидается {expected_type}! Сфотографируйте {type_names.get(expected_type, 'документ')}."
         }
-    
+
     # Если тип не определён и номер не найден
     if doc_type is None and doc_number == "НЕ НАЙДЕНО":
         if found_product != "НЕ НАЙДЕНО":
@@ -206,10 +201,11 @@ def process_document_scan(file_path: str, expected_type: str, order_id_str: str)
                 "status": "error",
                 "message": f"❌ Не удалось распознать документ! Сфотографируйте {type_names.get(expected_type, 'документ')}."
             }
-    
+
     # 5. Проверяем соответствие заказу
     if order_id_str:
-        product_error = check_document_match(order_id_str, found_product, doc_number)
+        product_error = check_document_match(
+            order_id_str, found_product, doc_number)
         if product_error:
             if product_error.startswith("⚠️"):
                 return {
@@ -224,7 +220,7 @@ def process_document_scan(file_path: str, expected_type: str, order_id_str: str)
                     "status": "error",
                     "message": product_error
                 }
-    
+
     return {
         "status": "ok",
         "doc_number": doc_number,
@@ -249,18 +245,20 @@ def get_current_step(order_id: int) -> str:
     return progress["current_step"]
 
 # ── Поворот фото ──────────────────────────────
+
+
 @router.post("/api/rotate-photo")
 async def api_rotate_photo(request: Request):
     data = await request.json()
     image_path = data.get("image_path", "")
     rotation = data.get("rotation", 0)
-    
+
     if not image_path or rotation == 0:
         return JSONResponse(content={"status": "error", "message": "Нет данных"}, status_code=400)
-    
+
     # Определяем путь на сервере
     file_path = None
-    
+
     # Вариант 1: /uploads/order_1/gch.jpeg
     if image_path.startswith("/uploads/"):
         file_path = os.path.join("app/static", image_path.lstrip("/"))
@@ -277,19 +275,19 @@ async def api_rotate_photo(request: Request):
             file_path = os.path.join("app/static", path.lstrip("/"))
         elif path.startswith("/static/uploads/"):
             file_path = os.path.join("app", path.lstrip("/"))
-    
+
     if not file_path or not os.path.exists(file_path):
         return JSONResponse(content={
-            "status": "error", 
+            "status": "error",
             "message": f"Файл не найден: {image_path}"
         }, status_code=404)
-    
+
     # Поворачиваем фото
     import cv2
     img = cv2.imread(file_path)
     if img is None:
         return JSONResponse(content={"status": "error", "message": "Не удалось загрузить фото"}, status_code=500)
-    
+
     # Нормализуем угол
     rotation = rotation % 360
     if rotation == 0:
@@ -300,10 +298,10 @@ async def api_rotate_photo(request: Request):
         img = cv2.rotate(img, cv2.ROTATE_180)
     elif rotation == 270 or rotation == -90:
         img = cv2.rotate(img, cv2.ROTATE_90_COUNTERCLOCKWISE)
-    
+
     # Сохраняем
     cv2.imwrite(file_path, img)
-    
+
     return JSONResponse(content={"status": "ok", "new_url": image_path})
 # ── Личный кабинет ───────────────────────────────
 
@@ -549,37 +547,37 @@ async def api_scan_gch(request: Request, file: UploadFile = File(...)):
         shutil.copyfileobj(file.file, buffer)
 
     order_id_str = request.query_params.get("order_id", None)
-    
+
     # Общая обработка
     result = process_document_scan(file_path, "ГЧ", order_id_str)
-    
+
     if result["status"] == "error":
         return JSONResponse(content=result)
-    
+
     # Продолжаем при "ok" и "warning"
     full_text = result.get("full_text", "")
     gch_number = result.get("doc_number", "НЕ НАЙДЕНО")
     found_product = result.get("found_product", "НЕ НАЙДЕНО")
-    
+
     # Извлекаем RAL и размеры
     ral_match = re.search(r"RAL\s*(\d{4})", full_text, re.IGNORECASE)
     ral = ral_match.group(1).strip() if ral_match else ""
-    
+
     from app.green_extractor import extract_all_colored_numbers
     numbers = extract_all_colored_numbers(file_path)
-    
+
     # Сохраняем
     if order_id_str:
         from app.database import save_gch
         order_id = int(order_id_str)
         save_gch(order_id, gch_number, ral, numbers)
-        
+
         order_dir = os.path.join("app/static/uploads", f"order_{order_id}")
         os.makedirs(order_dir, exist_ok=True)
         dest_path = os.path.join(order_dir, "gch.jpeg")
         with open(file_path, "rb") as src, open(dest_path, "wb") as dst:
             shutil.copyfileobj(src, dst)
-    
+
     return JSONResponse(content={
         "status": result["status"],
         "message": result.get("message", ""),
@@ -677,37 +675,37 @@ async def api_scan_g3(request: Request, file: UploadFile = File(...)):
         shutil.copyfileobj(file.file, buffer)
 
     order_id_str = request.query_params.get("order_id", None)
-    
+
     # Общая обработка
     result = process_document_scan(file_path, "Г3", order_id_str)
-    
+
     if result["status"] == "error":
         return JSONResponse(content=result)
-    
+
     # Продолжаем при "ok" и "warning"
     full_text = result.get("full_text", "")
     g3_number = result.get("doc_number", "НЕ НАЙДЕНО")
     found_product = result.get("found_product", "НЕ НАЙДЕНО")
-    
+
     # Извлекаем параметры
     from app.param_extractor import extract_params_via_gpt
     try:
         params = extract_params_via_gpt(full_text, found_product)
     except Exception as e:
         return handle_gpt_error(e)
-    
+
     # Сохраняем
     if order_id_str:
         from app.database import save_g3
         order_id = int(order_id_str)
         save_g3(order_id, g3_number, params)
-        
+
         order_dir = os.path.join("app/static/uploads", f"order_{order_id}")
         os.makedirs(order_dir, exist_ok=True)
         dest_path = os.path.join(order_dir, "g3.jpeg")
         with open(file_path, "rb") as src, open(dest_path, "wb") as dst:
             shutil.copyfileobj(src, dst)
-    
+
     return JSONResponse(content={
         "status": result["status"],
         "message": result.get("message", ""),
@@ -718,6 +716,8 @@ async def api_scan_g3(request: Request, file: UploadFile = File(...)):
     })
 
 # ── Эндпоинт ручного сохранения Г3 ─────────────────
+
+
 @router.post("/api/save-g3")
 async def api_save_g3(request: Request):
     data = await request.json()
@@ -802,37 +802,37 @@ async def api_scan_pg3(request: Request, file: UploadFile = File(...)):
         shutil.copyfileobj(file.file, buffer)
 
     order_id_str = request.query_params.get("order_id", None)
-    
+
     # Общая обработка
     result = process_document_scan(file_path, "ПГ3", order_id_str)
-    
+
     if result["status"] == "error":
         return JSONResponse(content=result)
-    
+
     # Продолжаем при "ok" и "warning"
     full_text = result.get("full_text", "")
     pg3_number = result.get("doc_number", "НЕ НАЙДЕНО")
     found_product = result.get("found_product", "НЕ НАЙДЕНО")
-    
+
     # Извлекаем позиции
     from app.param_extractor import extract_pg3_via_gpt
     try:
         items = extract_pg3_via_gpt(full_text, found_product)
     except Exception as e:
         return handle_gpt_error(e)
-    
+
     # Сохраняем
     if order_id_str:
         from app.database import save_pg3
         order_id = int(order_id_str)
         save_pg3(order_id, pg3_number, items)
-        
+
         order_dir = os.path.join("app/static/uploads", f"order_{order_id}")
         os.makedirs(order_dir, exist_ok=True)
         dest_path = os.path.join(order_dir, "pg3.jpeg")
         with open(file_path, "rb") as src, open(dest_path, "wb") as dst:
             shutil.copyfileobj(src, dst)
-    
+
     return JSONResponse(content={
         "status": result["status"],
         "message": result.get("message", ""),
@@ -1253,15 +1253,15 @@ def protocol_page(request: Request):
                 # Нет допуска — 5% от эталона, минимум 0.5
                 tol = max(0.5, abs(etalon) * 0.05)
                 return tol, tol
-            
+
             # Извлекаем числа из строки
             numbers = re.findall(r'[\d.]+', tolerance_str)
             if not numbers:
                 tol = max(0.5, abs(etalon) * 0.05)
                 return tol, tol
-            
+
             value = float(numbers[0])
-            
+
             if '±' in tolerance_str:
                 return value, value
             elif tolerance_str.strip().startswith('+'):
@@ -1277,18 +1277,20 @@ def protocol_page(request: Request):
                 # Находим параметр из Г3 по name и position
                 matching = None
                 for g3_param in g3_params:
-                    if (g3_param.get('name') == m_val.get('name') and 
-                        g3_param.get('position') == m_val.get('position', '')):
+                    if (g3_param.get('name') == m_val.get('name') and
+                            g3_param.get('position') == m_val.get('position', '')):
                         matching = g3_param
                         break
-                
+
                 if matching and m_val.get('etalon'):
                     try:
                         etalon = float(str(m_val['etalon']).replace(',', '.'))
-                        lower_tol, upper_tol = parse_tolerance(matching.get('tolerance', ''), etalon)
+                        lower_tol, upper_tol = parse_tolerance(
+                            matching.get('tolerance', ''), etalon)
                         m_val['lower_tol'] = lower_tol
                         m_val['upper_tol'] = upper_tol
-                        m_val['tolerance_display'] = matching.get('tolerance', '')
+                        m_val['tolerance_display'] = matching.get(
+                            'tolerance', '')
                     except (ValueError, TypeError):
                         m_val['lower_tol'] = 0
                         m_val['upper_tol'] = 0
@@ -1385,17 +1387,19 @@ def delete_order_route(request: Request, order_id: int):
     return RedirectResponse("/dashboard", status_code=303)
 
 # ── Страница шильдика ─────────────────────────────
+
+
 @router.get("/shildik")
 def shildik_page(request: Request):
     user = get_current_user(request)
     if not user:
         return RedirectResponse("/login", status_code=303)
-    
+
     order_id = request.query_params.get("order_id", None)
     order_data = None
     serial_number = ""
     test_date = ""
-    
+
     if order_id:
         conn = get_db()
         cursor = conn.cursor()
@@ -1403,23 +1407,23 @@ def shildik_page(request: Request):
         row = cursor.fetchone()
         order_data = dict(row) if row else None
         conn.close()
-        
+
         if order_data:
             from datetime import datetime
             import re as re_module
-            
+
             test_date = datetime.now().strftime("%d.%m.%Y")
-            
+
             order_num = order_data.get("order_number", "")
             match = re_module.search(r"ПС\d{2}[.\-](\d+)", order_num)
             if match:
                 first_digits = match.group(1)[:4].zfill(4)
             else:
                 first_digits = "0000"
-            
+
             date_part = datetime.now().strftime("%d%m%y")
             serial_number = f"{first_digits}{date_part}01"
-    
+
     return templates.TemplateResponse("shildik.html", {
         "request": request,
         "order": order_data,
@@ -1428,40 +1432,41 @@ def shildik_page(request: Request):
         "user": user,
     })
 
+
 @router.get("/shildik/svg")
 def shildik_svg(request: Request):
     from fastapi.responses import Response
-    
+
     order_id = request.query_params.get("order_id", None)
     if not order_id:
         return Response(content="Ошибка: нет order_id", media_type="text/plain")
-    
+
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute("SELECT * FROM orders WHERE id = ?", (int(order_id),))
     row = cursor.fetchone()
     conn.close()
-    
+
     if not row:
         return Response(content="Ошибка: заказ не найден", media_type="text/plain")
-    
+
     order_data = dict(row)
-    
+
     from datetime import datetime
     import re as re_module
-    
+
     test_date = datetime.now().strftime("%d.%m.%Y")
-    
+
     order_num = order_data.get("order_number", "")
     match = re_module.search(r"ПС\d{2}[.\-](\d+)", order_num)
     if match:
         first_digits = match.group(1)[:4].zfill(4)
     else:
         first_digits = "0000"
-    
+
     date_part = datetime.now().strftime("%d%m%y")
     serial_number = f"{first_digits}{date_part}01"
-    
+
     from app.shildik_generator import generate_shildik_svg
     svg = generate_shildik_svg(
         product_name=order_data.get("product_name", ""),
@@ -1469,5 +1474,5 @@ def shildik_svg(request: Request):
         test_date=test_date,
         order_number=order_data.get("order_number", "")
     )
-    
+
     return Response(content=svg, media_type="image/svg+xml")
