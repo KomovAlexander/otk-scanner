@@ -618,6 +618,7 @@
             g3_values: Array.from(document.querySelectorAll('.g3-input')).map(input => ({
                 name: input.dataset.name,
                 value: input.value.trim(),
+                unit: input.dataset.unit || '',
                 comment: input.parentElement.querySelector('textarea')?.value || ''
             })),
             pg3_confirmed: Array.from(document.querySelectorAll('.pg3-checkbox')).map(cb => ({

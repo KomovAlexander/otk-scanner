@@ -230,17 +230,25 @@
                     {% set matching_param = g3_params | selectattr('name', 'equalto', val.name) | selectattr('position', 'equalto', val.position or '') | list | first %}
                     {% if matching_param %}
                     <tr>
-                        <td class="param-col">{{ val.name or 'Параметр' }}{% if val.position %} (поз. {{ val.position }}){% endif %} — эталон: {{ val.etalon or '—' }} {{ val.unit or '' }}</td>
+                        <td class="param-col">{{ val.name or 'Параметр' }}{% if val.position %} (поз. {{ val.position }}){% endif %} — эталон: {{ val.etalon or '—' }} {{ val.unit or '' }}{% if val.tolerance_display %} (допуск: {{ val.tolerance_display }}){% endif %}</td>
                         <td class="value-col">{{ val.value or '—' }} {{ val.unit or '' }}</td>
                         <td class="result-col">
                             {% if val.value and val.etalon %}
                                 {% set et = val.etalon | string | replace(',', '.') | float %}
                                 {% set vl = val.value | string | replace(',', '.') | float %}
-                                {% set tol = (et * 0.05) | round(1) %}{% if tol == 0 %}{% set tol = 0.5 %}{% endif %}
-                                {% if vl >= et - tol and vl <= et + tol %}<span class="result-ok">В норме</span>
-                                {% else %}<span class="result-fail">Не соотв. ({{ et }})</span>{% endif %}
-                            {% elif val.value %}<span class="result-warn">—</span>
-                            {% else %}<span class="result-fail">—</span>{% endif %}
+                                {% set lower = val.lower_tol | float if val.lower_tol else 0 %}
+                                {% set upper = val.upper_tol | float if val.upper_tol else 0 %}
+                                
+                                {% if vl >= et - lower and vl <= et + upper %}
+                                    <span class="result-ok">В норме</span>
+                                {% else %}
+                                    <span class="result-fail">Не соотв. ({{ et }}{% if lower or upper %} ±{{ upper }}{% endif %})</span>
+                                {% endif %}
+                            {% elif val.value %}
+                                <span class="result-warn">—</span>
+                            {% else %}
+                                <span class="result-fail">—</span>
+                            {% endif %}
                         </td>
                     </tr>
                     {% endif %}
@@ -317,6 +325,7 @@
                 </div>
             </div>
         </div>
+    </div>        
     {% if visual.deviations or measurements.deviations %}
     <!-- Кнопка несоответствий -->
     <button class="btn-next" onclick="toggleDeviations()" id="btnDeviations" style="display: block; width: 100%; padding: 14px; margin-top: 10px; background: #f44336; color: #fff; border: none; border-radius: 8px; font-size: 16px; font-weight: 600; cursor: pointer;">

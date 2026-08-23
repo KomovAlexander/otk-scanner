@@ -1186,6 +1186,7 @@ async def api_upload_photo(request: Request, file: UploadFile = File(...)):
 @router.get("/protocol")
 def protocol_page(request: Request):
     import json
+    import re
     from datetime import datetime
 
     user = get_current_user(request)
@@ -1242,31 +1243,64 @@ def protocol_page(request: Request):
 
         conn.close()
 
+        # ─── Подготавливаем допуски для измерений ───
+        def parse_tolerance(tolerance_str: str, etalon: float) -> tuple:
+            """
+            Разбирает строку допуска и возвращает (нижний, верхний) допуски.
+            Примеры: "±10 бар" → (10, 10), "+5 бар" → (0, 5), "" → (5%, 5%)
+            """
+            if not tolerance_str:
+                # Нет допуска — 5% от эталона, минимум 0.5
+                tol = max(0.5, abs(etalon) * 0.05)
+                return tol, tol
+            
+            # Извлекаем числа из строки
+            numbers = re.findall(r'[\d.]+', tolerance_str)
+            if not numbers:
+                tol = max(0.5, abs(etalon) * 0.05)
+                return tol, tol
+            
+            value = float(numbers[0])
+            
+            if '±' in tolerance_str:
+                return value, value
+            elif tolerance_str.strip().startswith('+'):
+                return 0, value
+            elif tolerance_str.strip().startswith('-'):
+                return value, 0
+            else:
+                return value, value
+
+        # Подготавливаем данные измерений с допусками
+        if measurement_data.get('g3_values'):
+            for m_val in measurement_data['g3_values']:
+                # Находим параметр из Г3 по name и position
+                matching = None
+                for g3_param in g3_params:
+                    if (g3_param.get('name') == m_val.get('name') and 
+                        g3_param.get('position') == m_val.get('position', '')):
+                        matching = g3_param
+                        break
+                
+                if matching and m_val.get('etalon'):
+                    try:
+                        etalon = float(str(m_val['etalon']).replace(',', '.'))
+                        lower_tol, upper_tol = parse_tolerance(matching.get('tolerance', ''), etalon)
+                        m_val['lower_tol'] = lower_tol
+                        m_val['upper_tol'] = upper_tol
+                        m_val['tolerance_display'] = matching.get('tolerance', '')
+                    except (ValueError, TypeError):
+                        m_val['lower_tol'] = 0
+                        m_val['upper_tol'] = 0
+                        m_val['tolerance_display'] = ''
+                else:
+                    m_val['lower_tol'] = 0
+                    m_val['upper_tol'] = 0
+                    m_val['tolerance_display'] = ''
+
         progress = get_order_progress(int(order_id))
         completed_steps = progress["completed_steps"]
         current_step = progress["current_step"]
-
-        # Проверяем, есть ли уже фото
-        photos = get_order_photos(int(order_id))
-        photos_done = len(photos) >= 4
-
-        # Если фото ещё не загружены — протокол текущий шаг
-        if not photos_done:
-            # Если протокол ещё не в completed_steps — добавляем
-            if "protocol" not in completed_steps:
-                completed_steps.append("protocol")
-                update_order_step(int(order_id), "photo", completed_steps)
-            else:
-                update_order_step(int(order_id), "photo")
-            current_step = "photo"
-        # Если фото уже загружены — фото пройден, протокол текущий
-        else:
-            if "photo" not in completed_steps:
-                completed_steps.append("photo")
-            if "protocol" in completed_steps:
-                completed_steps.remove("protocol")
-            update_order_step(int(order_id), "protocol", completed_steps)
-            current_step = "protocol"
 
     return templates.TemplateResponse("protocol.html", {
         "request": request,
