@@ -12,23 +12,50 @@
         margin-top: 16px;
     }
     .items-table th, .items-table td {
-        padding: 8px 6px;
+        padding: 8px 4px;
         text-align: left;
         font-size: 13px;
         border-bottom: 1px solid #2a2d35;
+        vertical-align: top;
     }
     .items-table th { color: #ff6b35; }
+    .items-table th:nth-child(1) { width: 35px; }
+    .items-table th:nth-child(2) { width: 45px; }
+    .items-table th:nth-child(3) { width: auto; }
+    .items-table th:nth-child(4) { width: 45px; }
+    .items-table th:nth-child(5) { width: 35px; }
+    
     .items-table input {
         width: 100%;
-        padding: 8px 10px;
+        padding: 8px 6px;
         background: #2a2d35;
         border: 1px solid #3a3d45;
         border-radius: 6px;
         color: #fff;
         font-size: 13px;
     }
-    .items-table input.pos-input { width: 50px; text-align: center; }
-    .items-table input.qty-input { width: 50px; text-align: center; }
+    .items-table input.pos-input { width: 45px; text-align: center; }
+    .items-table input.qty-input { width: 45px; text-align: center; }
+    
+    .items-table textarea.name-textarea {
+        width: 100%;
+        padding: 8px 6px;
+        background: #2a2d35;
+        border: 1px solid #3a3d45;
+        border-radius: 6px;
+        color: #fff;
+        font-size: 13px;
+        resize: none;
+        overflow: hidden;
+        min-height: 36px;
+        font-family: inherit;
+        line-height: 1.4;
+    }
+    .items-table textarea.name-textarea:focus {
+        outline: none;
+        border-color: #ff6b35;
+    }
+    
     .btn-add {
         padding: 10px 16px;
         background: #4caf50;
@@ -40,13 +67,14 @@
         margin-top: 10px;
     }
     .btn-delete {
-        padding: 6px 10px;
+        padding: 6px 8px;
         background: #f44336;
         color: #fff;
         border: none;
         border-radius: 6px;
         cursor: pointer;
         font-size: 12px;
+        width: 100%;
     }
     .photo-preview {
         text-align: center;
@@ -57,9 +85,68 @@
         max-height: 300px;
         border-radius: 8px;
     }
+    
+    /* Drag-and-drop (desktop) */
+    .drag-handle {
+        cursor: grab;
+        padding: 6px 4px;
+        color: #888;
+        font-size: 16px;
+        text-align: center;
+        vertical-align: middle;
+        user-select: none;
+    }
+    .drag-handle:active {
+        cursor: grabbing;
+    }
+    .dragging {
+        opacity: 0.5;
+        background: #252830;
+    }
+    .drag-over {
+        border-top: 2px solid #ff6b35;
+    }
+    
+    /* Кнопки для мобильных */
+    .drag-handle.mobile-mode {
+        cursor: default;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        align-items: center;
+    }
+    .btn-move {
+        width: 26px;
+        height: 22px;
+        background: #2a2d35;
+        color: #888;
+        border: 1px solid #3a3d45;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 12px;
+        line-height: 1;
+        padding: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .btn-move:hover {
+        background: #3a3d45;
+        color: #fff;
+    }
+    
+    .items-table td:last-child {
+        text-align: right;
+    }
+    .items-table td:nth-child(4) {
+        text-align: right;
+        padding-right: 4px;
+    }
+    
     @media (max-width: 480px) {
         .items-table input { font-size: 12px; padding: 6px; }
-        .btn-delete { padding: 8px 12px; font-size: 14px; }
+        .items-table textarea.name-textarea { font-size: 12px; padding: 6px; }
+        .btn-delete { padding: 8px 10px; font-size: 14px; }
     }
 </style>
 {% endblock %}
@@ -75,12 +162,12 @@
     <!-- РЕЖИМ 2: заказ уже был — показываем фото и данные -->
     <div class="capture-zone">
         <div class="photo-preview">
-            <img src="{{ saved_photo }}" alt="Фото ПГ3" class="zoomable">
+            <img src="{{ saved_photo }}" alt="Фото ПГ3">
         </div>
         <button class="btn-capture" onclick="document.getElementById('cameraInput').click()">📷 Переснять</button>
         <label for="galleryInput" class="btn-upload">📁 Другой файл</label>
     </div>
-    <input type="file" id="cameraInput" accept="image/*" capture="environment" hidden>
+    <input type="file" id="cameraInput" accept="image/*,.pdf" capture="environment" hidden>
     <input type="file" id="galleryInput" accept="image/*,.pdf" hidden>
 
     <div class="result-card" id="dataCard">
@@ -97,9 +184,10 @@
         </div>
 
         <h3 style="margin-top: 20px;">📦 Позиции (редактируемые):</h3>
-        <table class="items-table">
+        <p style="font-size: 12px; color: #888; margin-top: 4px;">⋮⋮ — перетащите (ПК) или ↑↓ (телефон)</p>
+        <table class="items-table" id="itemsTable">
             <thead>
-                <tr><th>Поз.</th><th>Наименование</th><th>Кол.</th><th></th></tr>
+                <tr><th></th><th>Поз.</th><th>Наименование</th><th>Кол.</th><th></th></tr>
             </thead>
             <tbody id="itemsBody"></tbody>
         </table>
@@ -117,7 +205,7 @@
             <span class="camera-icon">📷</span>
             <p>Нажмите чтобы сделать фото</p>
         </div>
-        <input type="file" id="cameraInput" accept="image/*" capture="environment" hidden>
+        <input type="file" id="cameraInput" accept="image/*,.pdf" capture="environment" hidden>
         <input type="file" id="galleryInput" accept="image/*,.pdf" hidden>
         <button class="btn-capture" id="captureBtn">📷 Сделать фото</button>
         <label for="galleryInput" class="btn-upload">📁 Загрузить из галереи</label>
@@ -141,9 +229,10 @@
         </div>
 
         <h3 style="margin-top: 20px;">📦 Позиции (редактируемые):</h3>
-        <table class="items-table">
+        <p style="font-size: 12px; color: #888; margin-top: 4px;">⋮⋮ — перетащите (ПК) или ↑↓ (телефон)</p>
+        <table class="items-table" id="itemsTable">
             <thead>
-                <tr><th>Поз.</th><th>Наименование</th><th>Кол.</th><th></th></tr>
+                <tr><th></th><th>Поз.</th><th>Наименование</th><th>Кол.</th><th></th></tr>
             </thead>
             <tbody id="itemsBody"></tbody>
         </table>
@@ -160,6 +249,14 @@
 <script>
     let currentItems = {{ pg3_items | tojson }};
     let hasData = {{ 'true' if pg3_data else 'false' }};
+    
+    // Нормализуем quantity
+    if (currentItems) {
+        currentItems = currentItems.map(item => ({
+            ...item,
+            quantity: item.quantity || '1'
+        }));
+    }
     
     renderItems();
 
@@ -240,25 +337,114 @@
                 .catch(err => alert('Ошибка: ' + err));
         });
     });
+
     function renderItems() {
         const tbody = document.getElementById('itemsBody');
         if (!currentItems || currentItems.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#888;">Позиции не найдены</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#888;">Позиции не найдены</td></tr>';
             return;
         }
+        
+        const isMobile = /Android|iPhone|iPad|iPod|Windows Phone/i.test(navigator.userAgent);
+        
         tbody.innerHTML = currentItems.map((item, i) => `
-            <tr>
+            <tr data-index="${i}">
+                <td class="drag-handle ${isMobile ? 'mobile-mode' : ''}" ${isMobile ? '' : 'draggable="true"'} title="${isMobile ? '' : 'Перетащите для изменения порядка'}">
+                    ${isMobile ? `
+                        <button class="btn-move" onclick="moveItem(${i}, -1)" title="Вверх">↑</button>
+                        <button class="btn-move" onclick="moveItem(${i}, 1)" title="Вниз">↓</button>
+                    ` : '⋮⋮'}
+                </td>
                 <td><input type="text" class="pos-input" value="${item.position || ''}" oninput="updateItem(${i}, 'position', this.value)"></td>
-                <td><input type="text" value="${item.name || ''}" oninput="updateItem(${i}, 'name', this.value)"></td>
+                <td><textarea class="name-textarea" rows="1" oninput="updateItem(${i}, 'name', this.value); autoResize(this);">${item.name || ''}</textarea></td>
                 <td><input type="text" class="qty-input" value="${item.quantity || '1'}" oninput="updateItem(${i}, 'quantity', this.value)"></td>
                 <td><button class="btn-delete" onclick="deleteItem(${i})">✕</button></td>
             </tr>
         `).join('');
+        
+        if (!isMobile) {
+            attachDragHandlers();
+        }
+        
+        document.querySelectorAll('.name-textarea').forEach(autoResize);
     }
 
-    function updateItem(index, field, value) { if (!currentItems[index]) return; currentItems[index][field] = value; }
-    function deleteItem(index) { currentItems.splice(index, 1); renderItems(); }
-    function addItem() { currentItems.push({ position: '', name: '', quantity: '1' }); renderItems(); }
+    function autoResize(textarea) {
+        textarea.style.height = 'auto';
+        textarea.style.height = textarea.scrollHeight + 'px';
+    }
+
+    function moveItem(index, direction) {
+        const newIndex = index + direction;
+        if (newIndex < 0 || newIndex >= currentItems.length) return;
+        
+        const [movedItem] = currentItems.splice(index, 1);
+        currentItems.splice(newIndex, 0, movedItem);
+        renderItems();
+    }
+
+    function attachDragHandlers() {
+        const handles = document.querySelectorAll('.drag-handle[draggable="true"]');
+        let draggedIndex = null;
+        let draggedRow = null;
+
+        handles.forEach(handle => {
+            handle.addEventListener('dragstart', (e) => {
+                draggedRow = handle.closest('tr');
+                draggedIndex = parseInt(draggedRow.dataset.index);
+                draggedRow.classList.add('dragging');
+                e.dataTransfer.effectAllowed = 'move';
+            });
+
+            handle.addEventListener('dragend', () => {
+                if (draggedRow) draggedRow.classList.remove('dragging');
+                document.querySelectorAll('.drag-over').forEach(r => r.classList.remove('drag-over'));
+                draggedRow = null;
+                draggedIndex = null;
+            });
+        });
+
+        const rows = document.querySelectorAll('#itemsBody tr');
+        rows.forEach(row => {
+            row.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'move';
+                row.classList.add('drag-over');
+            });
+
+            row.addEventListener('dragleave', () => {
+                row.classList.remove('drag-over');
+            });
+
+            row.addEventListener('drop', (e) => {
+                e.preventDefault();
+                row.classList.remove('drag-over');
+                
+                const targetIndex = parseInt(row.dataset.index);
+                if (draggedIndex !== null && draggedIndex !== targetIndex) {
+                    const [movedItem] = currentItems.splice(draggedIndex, 1);
+                    currentItems.splice(targetIndex, 0, movedItem);
+                    renderItems();
+                }
+                draggedIndex = null;
+            });
+        });
+    }
+
+    function updateItem(index, field, value) { 
+        if (!currentItems[index]) return; 
+        currentItems[index][field] = value; 
+    }
+    
+    function deleteItem(index) { 
+        currentItems.splice(index, 1); 
+        renderItems(); 
+    }
+    
+    function addItem() { 
+        currentItems.push({ position: '', name: '', quantity: '1' }); 
+        renderItems(); 
+    }
 
     async function goNext() {
         const params = new URLSearchParams(window.location.search);
