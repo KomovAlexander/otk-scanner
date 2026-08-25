@@ -5,6 +5,7 @@ import re
 import shutil
 import uuid
 
+import fitz
 from fastapi import APIRouter, File, Form, Request, UploadFile
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
@@ -38,6 +39,67 @@ STEP_URLS = {
     "protocol": "/protocol",
     "photo": "/photo",
 }
+
+
+def convert_pdf_to_image(pdf_path: str, output_dir: str = "app/static/uploads/temp") -> str:
+    """
+    Конвертирует первую страницу PDF в JPG.
+    Возвращает путь к JPG-файлу.
+    """
+    os.makedirs(output_dir, exist_ok=True)
+
+    # Открываем PDF
+    doc = fitz.open(pdf_path)
+    if len(doc) == 0:
+        doc.close()
+        raise Exception("PDF пустой")
+
+    # Берём первую страницу
+    page = doc[0]
+
+    # Конвертируем в изображение с высоким разрешением
+    mat = fitz.Matrix(2.0, 2.0)  # 2x zoom для качества
+    pix = page.get_pixmap(matrix=mat)
+
+    # Сохраняем как JPG
+    jpg_path = os.path.join(output_dir, f"pdf_{uuid.uuid4().hex[:8]}.jpg")
+    pix.save(jpg_path)
+
+    doc.close()
+    return jpg_path
+
+
+def save_uploaded_file_to_temp(file: UploadFile, upload_dir: str = "app/static/uploads") -> str:
+    """
+    Сохраняет загруженный файл (PDF или изображение) во временный JPG.
+    Возвращает путь к JPG-файлу.
+    """
+    os.makedirs(upload_dir, exist_ok=True)
+
+    file_ext = os.path.splitext(file.filename or "")[1].lower()
+
+    if file_ext == ".pdf":
+        # Сохраняем PDF
+        pdf_path = os.path.join(upload_dir, f"pdf_{uuid.uuid4().hex[:8]}.pdf")
+        with open(pdf_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+
+        # Конвертируем в JPG
+        jpg_path = convert_pdf_to_image(pdf_path)
+
+        # Удаляем PDF
+        os.remove(pdf_path)
+
+        return jpg_path
+    else:
+        # Обычное изображение
+        safe_name = f"scan_{uuid.uuid4().hex[:8]}.jpg"
+        file_path = os.path.join(upload_dir, safe_name)
+
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+
+        return file_path
 
 
 def save_uploaded_file(order_id: int, doc_type: str, file: UploadFile) -> str:
@@ -537,14 +599,7 @@ async def api_scan_gch(request: Request, file: UploadFile = File(...)):
     if not user:
         return JSONResponse(content={"status": "error"}, status_code=401)
 
-    upload_dir = "app/static/uploads"
-    os.makedirs(upload_dir, exist_ok=True)
-
-    safe_name = f"gch_{uuid.uuid4().hex[:8]}.jpg"
-    file_path = os.path.join(upload_dir, safe_name)
-
-    with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
+    file_path = save_uploaded_file_to_temp(file)
 
     order_id_str = request.query_params.get("order_id", None)
 
@@ -665,14 +720,7 @@ async def api_scan_g3(request: Request, file: UploadFile = File(...)):
     if not user:
         return JSONResponse(content={"status": "error"}, status_code=401)
 
-    upload_dir = "app/static/uploads"
-    os.makedirs(upload_dir, exist_ok=True)
-
-    safe_name = f"g3_{uuid.uuid4().hex[:8]}.jpg"
-    file_path = os.path.join(upload_dir, safe_name)
-
-    with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
+    file_path = save_uploaded_file_to_temp(file)
 
     order_id_str = request.query_params.get("order_id", None)
 
@@ -792,14 +840,7 @@ async def api_scan_pg3(request: Request, file: UploadFile = File(...)):
     if not user:
         return JSONResponse(content={"status": "error"}, status_code=401)
 
-    upload_dir = "app/static/uploads"
-    os.makedirs(upload_dir, exist_ok=True)
-
-    safe_name = f"pg3_{uuid.uuid4().hex[:8]}.jpg"
-    file_path = os.path.join(upload_dir, safe_name)
-
-    with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
+    file_path = save_uploaded_file_to_temp(file)
 
     order_id_str = request.query_params.get("order_id", None)
 
@@ -1409,8 +1450,8 @@ def shildik_page(request: Request):
         conn.close()
 
         if order_data:
-            from datetime import datetime
             import re as re_module
+            from datetime import datetime
 
             test_date = datetime.now().strftime("%d.%m.%Y")
 
@@ -1452,8 +1493,8 @@ def shildik_svg(request: Request):
 
     order_data = dict(row)
 
-    from datetime import datetime
     import re as re_module
+    from datetime import datetime
 
     test_date = datetime.now().strftime("%d.%m.%Y")
 

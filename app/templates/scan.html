@@ -44,7 +44,7 @@
         <label for="galleryInput" class="btn-upload">📁 Другой файл</label>
     </div>
     <input type="file" id="cameraInput" accept="image/*" capture="environment" hidden>
-    <input type="file" id="galleryInput" accept="image/*" hidden>
+    <input type="file" id="galleryInput" accept="image/*,.pdf" hidden>
 
     {% else %}
     <!-- РЕЖИМ 1: первый раз — только камера -->
@@ -54,7 +54,7 @@
             <p>Нажмите чтобы сделать фото</p>
         </div>
         <input type="file" id="cameraInput" accept="image/*" capture="environment" hidden>
-        <input type="file" id="galleryInput" accept="image/*" hidden>
+        <input type="file" id="galleryInput" accept="image/*,.pdf" hidden>
         <button class="btn-capture" id="captureBtn">📷 Сделать фото</button>
         <label for="galleryInput" class="btn-upload">📁 Загрузить из галереи</label>
     </div>
