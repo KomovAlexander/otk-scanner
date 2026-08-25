@@ -5,7 +5,7 @@ import re
 import shutil
 import uuid
 
-import fitz
+import pymupdf
 from fastapi import APIRouter, File, Form, Request, UploadFile
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
@@ -42,26 +42,17 @@ STEP_URLS = {
 
 
 def convert_pdf_to_image(pdf_path: str, output_dir: str = "app/static/uploads/temp") -> str:
-    """
-    Конвертирует первую страницу PDF в JPG.
-    Возвращает путь к JPG-файлу.
-    """
     os.makedirs(output_dir, exist_ok=True)
 
-    # Открываем PDF
-    doc = fitz.open(pdf_path)
+    doc = pymupdf.open(pdf_path)
     if len(doc) == 0:
         doc.close()
         raise Exception("PDF пустой")
 
-    # Берём первую страницу
     page = doc[0]
-
-    # Конвертируем в изображение с высоким разрешением
-    mat = fitz.Matrix(2.0, 2.0)  # 2x zoom для качества
+    mat = pymupdf.Matrix(2.0, 2.0)
     pix = page.get_pixmap(matrix=mat)
 
-    # Сохраняем как JPG
     jpg_path = os.path.join(output_dir, f"pdf_{uuid.uuid4().hex[:8]}.jpg")
     pix.save(jpg_path)
 
@@ -593,6 +584,7 @@ def check_gch_page(request: Request):
     })
 
 
+# ── Эндпоинт приёма фото ГЧ ───────────────────────
 @router.post("/api/scan-gch")
 async def api_scan_gch(request: Request, file: UploadFile = File(...)):
     user = get_current_user(request)
@@ -627,9 +619,14 @@ async def api_scan_gch(request: Request, file: UploadFile = File(...)):
         order_id = int(order_id_str)
         save_gch(order_id, gch_number, ral, numbers)
 
-        order_dir = os.path.join("app/static/uploads", f"order_{order_id}")
+        order_dir = f"app/static/uploads/order_{order_id}"
         os.makedirs(order_dir, exist_ok=True)
-        dest_path = os.path.join(order_dir, "gch.jpeg")
+        dest_path = f"{order_dir}/gch.jpeg"
+        
+        # Удаляем старый файл если есть
+        if os.path.exists(dest_path):
+            os.remove(dest_path)
+        
         with open(file_path, "rb") as src, open(dest_path, "wb") as dst:
             shutil.copyfileobj(src, dst)
 
@@ -641,6 +638,7 @@ async def api_scan_gch(request: Request, file: UploadFile = File(...)):
         "ral": ral,
         "numbers": numbers,
         "count": len(numbers),
+        "preview_url": f"/uploads/{os.path.basename(file_path)}",
     })
 
 
@@ -748,9 +746,14 @@ async def api_scan_g3(request: Request, file: UploadFile = File(...)):
         order_id = int(order_id_str)
         save_g3(order_id, g3_number, params)
 
-        order_dir = os.path.join("app/static/uploads", f"order_{order_id}")
+        order_dir = f"app/static/uploads/order_{order_id}"
         os.makedirs(order_dir, exist_ok=True)
-        dest_path = os.path.join(order_dir, "g3.jpeg")
+        dest_path = f"{order_dir}/g3.jpeg"
+        
+        # Удаляем старый файл если есть
+        if os.path.exists(dest_path):
+            os.remove(dest_path)
+        
         with open(file_path, "rb") as src, open(dest_path, "wb") as dst:
             shutil.copyfileobj(src, dst)
 
@@ -761,6 +764,7 @@ async def api_scan_g3(request: Request, file: UploadFile = File(...)):
         "found_product": found_product,
         "params": params,
         "count": len(params),
+        "preview_url": f"/uploads/{os.path.basename(file_path)}",
     })
 
 # ── Эндпоинт ручного сохранения Г3 ─────────────────
@@ -868,9 +872,9 @@ async def api_scan_pg3(request: Request, file: UploadFile = File(...)):
         order_id = int(order_id_str)
         save_pg3(order_id, pg3_number, items)
 
-        order_dir = os.path.join("app/static/uploads", f"order_{order_id}")
+        order_dir = f"app/static/uploads/order_{order_id}"
         os.makedirs(order_dir, exist_ok=True)
-        dest_path = os.path.join(order_dir, "pg3.jpeg")
+        dest_path = f"{order_dir}/pg3.jpeg"
         with open(file_path, "rb") as src, open(dest_path, "wb") as dst:
             shutil.copyfileobj(src, dst)
 
@@ -881,6 +885,7 @@ async def api_scan_pg3(request: Request, file: UploadFile = File(...)):
         "found_product": found_product,
         "items": items,
         "count": len(items),
+        "preview_url": f"/uploads/{os.path.basename(file_path)}",
     })
 
 

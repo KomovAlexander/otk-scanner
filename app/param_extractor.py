@@ -148,26 +148,11 @@ def extract_pg3_via_gpt(recognized_text: str, product_name: str) -> list:
         print("⚠️ Пустой текст, GPT не вызывается")
         return []
 
-    # Очищаем текст от мусора
-    lines = recognized_text.split("\n")
-    clean_lines = []
-    for line in lines:
-        line = line.strip()
-        if not line:
-            continue
-        # Оставляем только содержательные строки
-        if re.match(r'^\d+$', line) or len(line) > 3:
-            clean_lines.append(line)
-
-    clean_text = "\n".join(clean_lines)
-    print(f"Исходный текст: {len(recognized_text)} символов")
-    print(f"Очищенный текст: {len(clean_text)} символов")
-
-    # Разбиваем текст на части по ~500 символов
-    chunk_size = 500
+    # Разбиваем текст на части по ~2000 символов
+    chunk_size = 2000
     chunks = []
-    for i in range(0, len(clean_text), chunk_size):
-        chunk = clean_text[i:i + chunk_size]
+    for i in range(0, len(recognized_text), chunk_size):
+        chunk = recognized_text[i:i + chunk_size]
         if chunk.strip():
             chunks.append(chunk)
 
@@ -178,14 +163,22 @@ def extract_pg3_via_gpt(recognized_text: str, product_name: str) -> list:
     for chunk_index, chunk in enumerate(chunks):
         print(f"\n--- Часть {chunk_index + 1} из {len(chunks)} ---")
 
-        prompt = f"""Извлеки позиции из этого фрагмента перечня элементов (ПГ3):
+        prompt = f"""Извлеки позиции из перечня элементов (ПГ3):
 {chunk}
 
-ВАЖНО: Верни ТОЛЬКО JSON-массив с полями position, name, quantity.
-Если количество не указано — quantity = "1".
-Если строка не является позицией — пропусти её.
+ПРАВИЛА ИЗВЛЕЧЕНИЯ:
+1. Номер позиции — это строка, содержащая ТОЛЬКО цифры (60, 61, 70) или цифры с точкой (01.1, 1.1).
+2. Всё, что идёт после номера позиции до следующего номера — это НАИМЕНОВАНИЕ этой позиции.
+3. Наименование может занимать несколько строк — объединяй их.
+4. Если наименование содержит "_" или "/" — это ОДНО наименование, не разбивай.
+5. Если строка с кодом изделия (буквы+цифры+"/") идёт БЕЗ номера перед ней — это НОВАЯ позиция с position = "-".
+6. Одиночное число (1, 2) после наименования — это КОЛИЧЕСТВО, а не номер позиции.
+7. Количество по умолчанию — "1".
 
-Верни ТОЛЬКО JSON-массив, без лишнего текста."""
+ФОРМАТ ОТВЕТА:
+[{{"position": "номер или пусто", "name": "наименование", "quantity": "количество"}}]
+
+Верни ТОЛЬКО JSON-массив, без текста."""
 
         text = call_gpt_with_error_handling(
             prompt,
@@ -206,8 +199,15 @@ def extract_pg3_via_gpt(recognized_text: str, product_name: str) -> list:
                         quantity = str(item.get("quantity", "")).strip()
                         if not quantity:
                             quantity = "1"
+
+                        position = str(item.get("position", "")).strip()
+                        # Убираем буквы из position
+                        position = re.sub(r'[A-ZА-Яa-zа-я]', '', position)
+                        # Оставляем только цифры, точки, дефисы
+                        position = re.sub(r'[^\d.\-]', '', position)
+
                         all_items.append({
-                            "position": str(item.get("position", "")).strip(),
+                            "position": position,
                             "name": item.get("name", ""),
                             "quantity": quantity
                         })
