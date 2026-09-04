@@ -355,6 +355,7 @@
     let deviations = [];
     let pg3Changed = false;
     let isRestoring = false;
+    
     function toggleSection(sectionId) {
         const content = document.getElementById(sectionId);
         const icon = document.getElementById(sectionId.replace('Section', 'Icon'));
@@ -538,7 +539,6 @@
         }
 
         document.querySelectorAll('.check-select').forEach(select => {
-            // Пропускаем matchGCH — у него своя обработка
             if (select.id === 'matchGCH') return;
             
             const name = select.dataset.name || select.id || 'Параметр';
@@ -597,7 +597,6 @@
     async function autoSave() {
         if (isRestoring) return;
         
-        // Пересчитываем deviations перед сохранением
         updateDeviations();
         
         const params = new URLSearchParams(window.location.search);
@@ -663,6 +662,7 @@
         if (massInput && (!massInput.value || parseFloat(massInput.value) <= 0)) allFilled = false;
         
         document.querySelectorAll('.check-select').forEach(select => {
+            if (select.id === 'matchGCH') return;
             if (!select.value) allFilled = false;
         });
         
@@ -676,7 +676,6 @@
             const qtyInput = row.querySelector('.pg3-qty');
             const nameChanged = nameInput.value.trim() !== nameInput.dataset.original;
             const qtyChanged = qtyInput.value.trim() !== qtyInput.dataset.expected;
-            // Позиция подтверждена, если галочка стоит ИЛИ есть изменения
             if (!cb.checked && !nameChanged && !qtyChanged) allFilled = false;
         });
         
@@ -702,7 +701,6 @@
         window.location.href = '/measurements?' + params.toString();
     }
 
-    // Обработчики событий
     document.getElementById('matchGCH').addEventListener('change', function() {
         document.getElementById('gchCommentBox').style.display = this.value === 'no' ? 'block' : 'none';
         if (this.value === 'no') { this.classList.add('match-fail'); this.classList.remove('match-ok'); }
@@ -734,7 +732,6 @@
         });
     });
 
-    // Загрузка сохранённых данных из БД
     (async function loadSavedData() {
         const params = new URLSearchParams(window.location.search);
         const orderId = params.get('order_id');
@@ -771,7 +768,6 @@
             }
             
             if (saved.g3_checks) {
-                // Ищем select'ы по data-name (исключая matchGCH)
                 saved.g3_checks.forEach(check => {
                     const select = document.querySelector(`.check-select[data-name="${check.name}"]`);
                     if (select && check.value) {
@@ -789,7 +785,8 @@
                 });
             }
             
-            if (saved.pg3_confirmed) {
+            if (saved.pg3_confirmed && saved.pg3_confirmed.length > 0) {
+                console.log('✅ Восстанавливаю pg3_confirmed:', saved.pg3_confirmed);
                 document.querySelectorAll('.pg3-checkbox').forEach(cb => {
                     const savedItem = saved.pg3_confirmed.find(item => item.position === cb.dataset.position);
                     if (savedItem) {
@@ -797,10 +794,11 @@
                         updateRowStatus(cb.closest('tr'));
                     }
                 });
+            } else {
+                console.log('✅ pg3_confirmed ПУСТОЙ — сброшен');
             }
             
-            // Восстанавливаем изменения ПГ3
-            if (saved.pg3_changes) {
+            if (saved.pg3_changes && saved.pg3_changes.length > 0) {
                 saved.pg3_changes.forEach(change => {
                     const row = document.querySelector(`tr[data-position="${change.position}"]`);
                     if (row) {
@@ -819,7 +817,6 @@
             
             isRestoring = false;
             
-            // Пересохраняем только если есть данные
             const hasAnyData = 
                 document.getElementById('matchGCH')?.value ||
                 document.querySelector('.size-input')?.value ||

@@ -767,19 +767,22 @@ async def api_scan_g3(request: Request, file: UploadFile = File(...)):
         "preview_url": f"/uploads/{os.path.basename(file_path)}",
     })
 
-# ── Эндпоинт ручного сохранения Г3 ─────────────────
 
-
-@router.post("/api/save-g3")
-async def api_save_g3(request: Request):
+# ── Эндпоинт ручного сохранения ПГ3 ────────────────
+@router.post("/api/save-pg3")
+async def api_save_pg3(request: Request):
     data = await request.json()
     order_id = data.get("order_id")
     if order_id:
-        from app.database import save_g3
-        save_g3(int(order_id), data.get(
-            "g3_number", ""), data.get("params", []))
-
-        mark_step_completed(int(order_id), "g3", "pg3")
+        from app.database import save_pg3, mark_step_completed, get_order_progress
+        
+        # Просто сохраняем
+        save_pg3(int(order_id), data.get("pg3_number", ""), data.get("items", []))
+        
+        # Отмечаем шаг только если не пройден
+        progress = get_order_progress(int(order_id))
+        if "pg3" not in progress["completed_steps"]:
+            mark_step_completed(int(order_id), "pg3", "visual")
 
         return JSONResponse(content={"status": "ok"})
     return JSONResponse(content={"status": "error", "message": "Нет order_id"}, status_code=400)
@@ -868,10 +871,10 @@ async def api_scan_pg3(request: Request, file: UploadFile = File(...)):
 
     # Сохраняем
     if order_id_str:
-        from app.database import save_pg3
+        from app.database import save_pg3, clear_visual_pg3_for_order
         order_id = int(order_id_str)
         save_pg3(order_id, pg3_number, items)
-
+        clear_visual_pg3_for_order(order_id)
         order_dir = f"app/static/uploads/order_{order_id}"
         os.makedirs(order_dir, exist_ok=True)
         dest_path = f"{order_dir}/pg3.jpeg"
@@ -895,13 +898,51 @@ async def api_save_pg3(request: Request):
     data = await request.json()
     order_id = data.get("order_id")
     if order_id:
-        from app.database import save_pg3
-        save_pg3(int(order_id), data.get(
-            "pg3_number", ""), data.get("items", []))
+        from app.database import save_pg3, clear_visual_pg3_for_order, get_db, mark_step_completed, get_order_progress
+        
+        # Получаем старые позиции из БД
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute("SELECT items FROM pg3_data WHERE order_id = ?", (int(order_id),))
+        row = cursor.fetchone()
+        conn.close()
+        
+        old_items = json.loads(row["items"]) if row and row["items"] else []
+        new_items = data.get("items", [])
+        
+        # Нормализуем для сравнения
+        def normalize_for_compare(items):
+            normalized = []
+            for item in items:
+                item = dict(item) if isinstance(item, dict) else {}
+                normalized.append({
+                    "position": str(item.get("position", "")).strip(),
+                    "name": str(item.get("name", "")).strip(),
+                    "quantity": str(item.get("quantity", "1")).strip(),
+                })
+            return normalized
+        
+        old_norm = normalize_for_compare(old_items)
+        new_norm = normalize_for_compare(new_items)
+        
+        items_changed = json.dumps(old_norm, ensure_ascii=False, sort_keys=True) != json.dumps(new_norm, ensure_ascii=False, sort_keys=True)
+        
+        # Сохраняем новые
+        save_pg3(int(order_id), data.get("pg3_number", ""), new_items)
+        
+        # Сбрасываем ПГ3-часть только если изменилось
+        if items_changed:
+            clear_visual_pg3_for_order(int(order_id))
+            print(f"✅ ПГ3 изменился — визуальный контроль сброшен")
+        else:
+            print(f"✅ ПГ3 не изменился — визуальный контроль сохранён")
+        
+        # Отмечаем шаг только если не пройден
+        progress = get_order_progress(int(order_id))
+        if "pg3" not in progress["completed_steps"]:
+            mark_step_completed(int(order_id), "pg3", "visual")
 
-        mark_step_completed(int(order_id), "pg3", "visual")
-
-        return JSONResponse(content={"status": "ok"})
+        return JSONResponse(content={"status": "ok", "changed": items_changed})
     return JSONResponse(content={"status": "error", "message": "Нет order_id"}, status_code=400)
 
 
@@ -911,65 +952,15 @@ async def api_save_visual(request: Request):
     data = await request.json()
     order_id = data.get("order_id")
     if order_id:
-        from app.database import mark_step_completed, save_visual_results
+        from app.database import mark_step_completed, save_visual_results, get_order_progress
         save_visual_results(int(order_id), data)
 
-        # Проверяем, ВСЕ ли обязательные поля заполнены
-        all_filled = True
-
-        # 1. Соответствие ГЧ
-        if not data.get("gch_match"):
-            all_filled = False
-
-        # 2. Все размеры заполнены
-        sizes = data.get("sizes", [])
-        if not sizes or any(not s or int(s) <= 0 for s in sizes):
-            all_filled = False
-
-        # 3. RAL заполнен
-        if not data.get("ral"):
-            all_filled = False
-
-        # 4. Масса заполнена
-        if not data.get("mass"):
-            all_filled = False
-
-        # 5. Все проверки Г3 выбраны
-        g3_checks = data.get("g3_checks", [])
-        if not g3_checks or any(not c.get("value") for c in g3_checks):
-            all_filled = False
-
-        # 6. Все параметры Г3 заполнены
-        g3_values = data.get("g3_values", [])
-        if not g3_values or any(not v.get("value") for v in g3_values):
-            all_filled = False
-
-        # 7. Все позиции ПГ3 подтверждены ИЛИ изменены
-        pg3_confirmed = data.get("pg3_confirmed", [])
-        pg3_changes = data.get("pg3_changes", [])
-
-        confirmed_positions = set()
-        for c in pg3_confirmed:
-            if c.get("confirmed"):
-                confirmed_positions.add(c.get("position"))
-
-        for change in pg3_changes:
-            position = change.get("position", "")
-            name = change.get("name", "")
-            original_name = change.get("original_name", "")
-            quantity = change.get("quantity", "")
-            expected_quantity = change.get("expected_quantity", "")
-            if name != original_name or quantity != expected_quantity:
-                confirmed_positions.add(position)
-
-        if not pg3_confirmed or len(confirmed_positions) != len(pg3_confirmed):
-            all_filled = False
-
-        # Только если ВСЁ заполнено — отмечаем шаг пройденным
-        if all_filled:
+        # Отмечаем шаг всегда, если ещё не пройден
+        progress = get_order_progress(int(order_id))
+        if "visual" not in progress["completed_steps"]:
             mark_step_completed(int(order_id), "visual", "measurements")
 
-        return JSONResponse(content={"status": "ok", "all_filled": all_filled})
+        return JSONResponse(content={"status": "ok"})
     return JSONResponse(content={"status": "error", "message": "Нет order_id"}, status_code=400)
 
 
@@ -1522,3 +1513,8 @@ def shildik_svg(request: Request):
     )
 
     return Response(content=svg, media_type="image/svg+xml")
+
+
+@router.get("/presentation")
+def presentation_page(request: Request):
+    return templates.TemplateResponse("presentation.html", {"request": request})

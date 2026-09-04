@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ОТК Сканер — презентация</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: 'Segoe UI', Arial, sans-serif;
+            background: #0d0f14;
+            color: #e0e0e0;
+            overflow: hidden;
+            height: 100vh;
+        }
+        
+        .presentation {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+        
+        .slides-container {
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .slide {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 40px 60px;
+            opacity: 0;
+            transition: opacity 0.5s ease;
+            pointer-events: none;
+        }
+        
+        .slide.active {
+            opacity: 1;
+            pointer-events: auto;
+        }
+        
+        .slide h1 {
+            font-size: 42px;
+            color: #ff6b35;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        
+        .slide h2 {
+            font-size: 30px;
+            color: #ff6b35;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        
+        .slide p {
+            font-size: 18px;
+            line-height: 1.6;
+            margin-bottom: 12px;
+            text-align: center;
+            max-width: 800px;
+        }
+        
+        .slide ul {
+            list-style: none;
+            font-size: 18px;
+            line-height: 1.8;
+            max-width: 800px;
+        }
+        
+        .slide ul li {
+            padding: 8px 0;
+            padding-left: 30px;
+            position: relative;
+        }
+        
+        .slide ul li::before {
+            content: "✅";
+            position: absolute;
+            left: 0;
+            top: 8px;
+        }
+        
+        .slide ul li.warn::before {
+            content: "⚠️";
+        }
+        
+        .demo-links {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 16px;
+            justify-content: center;
+            margin-top: 20px;
+        }
+        
+        .demo-link {
+            display: inline-block;
+            padding: 14px 24px;
+            background: #1e2128;
+            border: 2px solid #ff6b35;
+            border-radius: 10px;
+            color: #ff6b35;
+            text-decoration: none;
+            font-size: 16px;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+        
+        .demo-link:hover {
+            background: #ff6b35;
+            color: #fff;
+            transform: scale(1.05);
+        }
+        
+        .steps-flow {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+            justify-content: center;
+            margin-top: 30px;
+        }
+        
+        .step-item {
+            background: #1e2128;
+            border: 2px solid #2a2d35;
+            border-radius: 10px;
+            padding: 16px 20px;
+            font-size: 14px;
+            text-align: center;
+            min-width: 120px;
+        }
+        
+        .step-arrow {
+            font-size: 24px;
+            color: #ff6b35;
+        }
+        
+        .controls {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 20px;
+            padding: 16px;
+            background: #14161a;
+            border-top: 1px solid #2a2d35;
+        }
+        
+        .controls button {
+            padding: 10px 20px;
+            background: #2a2d35;
+            color: #ccc;
+            border: 1px solid #3a3d45;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        
+        .controls button:hover {
+            background: #3a3d45;
+        }
+        
+        .slide-number {
+            font-size: 14px;
+            color: #888;
+            min-width: 60px;
+            text-align: center;
+        }
+        
+        .tech-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 16px;
+            margin-top: 20px;
+        }
+        
+        .tech-card {
+            background: #1e2128;
+            border-radius: 10px;
+            padding: 20px;
+            text-align: center;
+        }
+        
+        .tech-card h3 {
+            color: #ff6b35;
+            margin-bottom: 8px;
+            font-size: 18px;
+        }
+        
+        .tech-card p {
+            font-size: 14px;
+            color: #888;
+        }
+    </style>
+</head>
+<body>
+    <div class="presentation">
+        <div class="slides-container">
+            
+            <!-- Слайд 1: Титульный -->
+            <div class="slide active">
+                <h1>🏭 ОТК Сканер</h1>
+                <p style="font-size: 24px; margin-bottom: 8px;">Автоматизация контроля качества</p>
+                <p style="color: #888;">Система сканирования и проверки гидравлических станций</p>
+            </div>
+            
+            <!-- Слайд 2: Проблема -->
+            <div class="slide">
+                <h2>Проблемы</h2>
+                <ul>
+                    <li class="warn">Проверка изделий без документов</li>
+                    <li class="warn">Ручной ввод данных с бумажных документов</li>
+                    <li class="warn">Долгая проверка чертежей и схем</li>
+                    <li class="warn">Человеческий фактор — ошибки при переписывании</li>
+                    <li class="warn">Формирование протоколов вручную</li>
+                    <li class="warn">Печать шильдиков через сторонние программы</li>
+                    <li class="warn">Отсутствие фотографий станций</li>
+                </ul>
+            </div>
+            
+            <!-- Слайд 3: Решение -->
+            <div class="slide">
+                <h2>Решение</h2>
+                <ul>
+                    <li>Запрет проведения проверки без загруженных чертежей</li>
+                    <li>Сканирование документов с телефона или PDF</li>
+                    <li>Автоматическое распознавание через Yandex OCR</li>
+                    <li>Извлечение параметров через YandexGPT</li>
+                    <li>Автопроверка на соответствие чертежам</li>
+                    <li>Генерация протокола и шильдика в один клик</li>
+                    <li>Фото станций сохраняются в системе — защита при претензиях</li>
+                </ul>
+            </div>
+            
+            <!-- Слайд 4: Процесс -->
+            <div class="slide">
+                <h2>Процесс проверки</h2>
+                <div class="steps-flow">
+                    <div class="step-item">📷 Заказ</div>
+                    <span class="step-arrow">→</span>
+                    <div class="step-item">📐 ГЧ</div>
+                    <span class="step-arrow">→</span>
+                    <div class="step-item">🔧 Г3</div>
+                    <span class="step-arrow">→</span>
+                    <div class="step-item">📋 ПГ3</div>
+                    <span class="step-arrow">→</span>
+                    <div class="step-item">🔍 Контроль</div>
+                    <span class="step-arrow">→</span>
+                    <div class="step-item">⚡ Измерения</div>
+                    <span class="step-arrow">→</span>
+                    <div class="step-item">📄 Протокол</div>
+                    <span class="step-arrow">→</span>
+                    <div class="step-item">📸 Фото</div>
+                </div>
+            </div>
+            <!-- Слайд: Личный кабинет -->
+            <div class="slide">
+                <h2>📋 Личный кабинет</h2>
+                <ul>
+                    <li>Список всех заказов испытателя</li>
+                    <li>Текущий статус каждого заказа</li>
+                    <li>Переход к любому этапу проверки</li>
+                    <li>Просмотр готовых протоколов</li>
+                    <li>Печать шильдиков</li>
+                    <li>Фотографии станций</li>
+                </ul>
+                <div class="demo-links" style="margin-top: 20px;">
+                    <a href="/dashboard" class="demo-link">📋 Открыть личный кабинет</a>
+                </div>
+            </div>              
+          
+            <!-- Слайд 6: Технологии -->
+            <div class="slide">
+                <h2>Технологии</h2>
+                <div class="tech-grid">
+                    <div class="tech-card">
+                        <h3>Python + FastAPI</h3>
+                        <p>Бэкенд-фреймворк</p>
+                    </div>
+                    <div class="tech-card">
+                        <h3>SQLite</h3>
+                        <p>База данных</p>
+                    </div>
+                    <div class="tech-card">
+                        <h3>Yandex Vision OCR</h3>
+                        <p>Распознавание текста с фото</p>
+                    </div>
+                    <div class="tech-card">
+                        <h3>YandexGPT</h3>
+                        <p>Извлечение параметров и позиций</p>
+                    </div>
+                </div>
+            </div>
+            <!-- Слайд 7: Результаты -->
+            <div class="slide">
+                <h2>Результаты</h2>
+                <ul>
+                    <li>13+ заказов оцифровано за время тестирования</li>
+                    <li>Проверка происходит с полным комплектом документов</li>
+                    <li>Протокол формируется автоматически</li>
+                    <li>Шильдик печатается в один клик</li>
+                </ul>
+            </div>
+            <!-- Слайд 8: Что нужно для внедрения? -->
+            <div class="slide">
+                <h2>Что нужно для внедрения?</h2>
+                <ul style="font-size: 16px;">
+                    <li>Утвердить порядок проведения испытания с применением системы ОТК Сканер</li>
+                    <li>Привлечь IT-отдел для развертывания системы на сервере,<br>её поддержания и сопровождения</li>
+                    <li>Закупить планшетные компьютеры для испытателей</li>
+                    <li>Выделить API-ключи Яндекс (Vision OCR + GPT)</li>
+                </ul>
+            </div>    
+
+            
+            <!-- Слайд 9: Перспективы автоматизации -->
+            <div class="slide">
+                <h2>Что ещё можно автоматизировать</h2>
+                <ul>
+                    <li>Автоматизация межоперационных контролей с генерацией отчётов (сварка, малярка, плиты)</li>
+                    <li>Связь с журналом ОТК в 1С — единая система по серийным номерам</li>
+                    <li>Проверка чертежей через YandexGPT или машинное обучение</li>
+                    <li>Перенос журнала средств измерений (СИ) в систему</li>
+                    <li>Генерация заявок на поверку СИ</li>
+                    <li>Проверка сроков поверки СИ</li>
+                </ul>
+            </div>
+            
+        </div>
+        
+        <div class="controls">
+            <button onclick="prevSlide()">← Назад</button>
+            <span class="slide-number" id="slideNumber">1 / 8</span>
+            <button onclick="nextSlide()">Вперёд →</button>
+        </div>
+    </div>
+    
+    <script>
+        let currentSlide = 0;
+        const slides = document.querySelectorAll('.slide');
+        const slideNumber = document.getElementById('slideNumber');
+        
+        function showSlide(index) {
+            slides.forEach((slide, i) => {
+                slide.classList.toggle('active', i === index);
+            });
+            slideNumber.textContent = `${index + 1} / ${slides.length}`;
+        }
+        
+        function nextSlide() {
+            if (currentSlide < slides.length - 1) {
+                currentSlide++;
+                showSlide(currentSlide);
+            }
+        }
+        
+        function prevSlide() {
+            if (currentSlide > 0) {
+                currentSlide--;
+                showSlide(currentSlide);
+            }
+        }
+        
+        // Навигация с клавиатуры
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowRight' || e.key === ' ') {
+                nextSlide();
+            } else if (e.key === 'ArrowLeft') {
+                prevSlide();
+            }
+        });
+    </script>
+</body>
+</html>
