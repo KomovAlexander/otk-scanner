@@ -364,8 +364,8 @@
     }
 
     function checkSize(input) {
-        const etalon = input.dataset.etalon;
-        const value = input.value.trim();
+        const etalon = input.dataset.etalon.replace(',', '.');
+        const value = input.value.trim().replace(',', '.');
         const commentBox = input.parentElement.querySelector('.comment-box');
         if (!value || parseInt(value) <= 0) {
             input.classList.add('match-fail'); input.classList.remove('match-ok');
@@ -406,8 +406,8 @@
     }
 
     function checkG3Value(input) {
-        const etalon = input.dataset.etalon;
-        const value = input.value.trim();
+        const etalon = input.dataset.etalon.replace(',', '.');
+        const value = input.value.trim().replace(',', '.');
         const commentBox = input.parentElement.querySelector('.comment-box');
         if (!value) {
             input.classList.remove('match-ok', 'match-fail');
@@ -432,10 +432,17 @@
         const nameInput = row.querySelector('.pg3-name');
         const qtyInput = row.querySelector('.pg3-qty');
         
-        const nameChanged = nameInput.value.trim() !== nameInput.dataset.original;
-        const qtyChanged = qtyInput.value.trim() !== qtyInput.dataset.expected;
+        // Нормализуем сравнение — убираем пробелы и переносы
+        const name = nameInput.value.trim().replace(/\s+/g, ' ');
+        const original = nameInput.dataset.original.trim().replace(/\s+/g, ' ');
+        const expected = qtyInput.dataset.expected.trim();
+        const actual = qtyInput.value.trim();
+        
+        const nameChanged = name !== original;
+        const qtyChanged = actual !== expected;
         const hasChanges = nameChanged || qtyChanged;
         
+        // Если изменений нет — крестик скрываем
         if (hasChanges) {
             crossMark.style.display = 'inline';
             checkbox.style.display = 'none';
@@ -472,8 +479,8 @@
 
     function checkPg3Name(input) {
         pg3Changed = true;
-        const original = input.dataset.original;
-        const value = input.value.trim();
+        const original = input.dataset.original.trim().replace(/\s+/g, ' ');
+        const value = input.value.trim().replace(/\s+/g, ' ');
         if (!value || value === original) {
             input.classList.remove('match-fail'); input.classList.add('match-ok');
         } else {
@@ -488,7 +495,7 @@
 
     function checkPg3Qty(input) {
         pg3Changed = true;
-        const expected = input.dataset.expected;
+        const expected = input.dataset.expected.trim();
         const value = input.value.trim();
         if (!value || value === expected) {
             input.classList.remove('match-fail'); input.classList.add('match-ok');
@@ -567,9 +574,10 @@
             const pos = cb.dataset.position;
             const row = cb.closest('tr');
             const name = row.querySelector('.pg3-name').value.trim();
-            const originalName = row.querySelector('.pg3-name').dataset.original;
+            const originalName = row.querySelector('.pg3-name').dataset.original.trim();
             const expected = row.querySelector('.pg3-qty').dataset.expected;
             const actual = row.querySelector('.pg3-qty').value.trim();
+            
             const nameChanged = name !== originalName;
             const qtyChanged = actual !== expected;
             
@@ -620,14 +628,16 @@
                 unit: input.dataset.unit || '',
                 comment: input.parentElement.querySelector('textarea')?.value || ''
             })),
-            pg3_confirmed: Array.from(document.querySelectorAll('.pg3-checkbox')).map(cb => ({
+            pg3_confirmed: Array.from(document.querySelectorAll('.pg3-checkbox')).map((cb, index) => ({
                 position: cb.dataset.position,
+                index: index,  // ← добавляем индекс
                 confirmed: cb.checked
             })),
-            pg3_changes: Array.from(document.querySelectorAll('.pg3-name')).map(input => {
+            pg3_changes: Array.from(document.querySelectorAll('.pg3-name')).map((input, index) => {
                 const row = input.closest('tr');
                 return {
                     position: row.dataset.position,
+                    index: index,  // ← добавляем индекс
                     name: input.value.trim(),
                     original_name: input.dataset.original,
                     quantity: row.querySelector('.pg3-qty')?.value.trim() || '',
@@ -786,9 +796,11 @@
             }
             
             if (saved.pg3_confirmed && saved.pg3_confirmed.length > 0) {
-                console.log('✅ Восстанавливаю pg3_confirmed:', saved.pg3_confirmed);
-                document.querySelectorAll('.pg3-checkbox').forEach(cb => {
-                    const savedItem = saved.pg3_confirmed.find(item => item.position === cb.dataset.position);
+                document.querySelectorAll('.pg3-checkbox').forEach((cb, index) => {
+                    const savedItem = saved.pg3_confirmed.find(item => 
+                        item.position === cb.dataset.position && 
+                        (item.index === undefined || item.index === index)
+                    );
                     if (savedItem) {
                         cb.checked = savedItem.confirmed;
                         updateRowStatus(cb.closest('tr'));
@@ -799,18 +811,18 @@
             }
             
             if (saved.pg3_changes && saved.pg3_changes.length > 0) {
-                saved.pg3_changes.forEach(change => {
-                    const row = document.querySelector(`tr[data-position="${change.position}"]`);
-                    if (row) {
-                        const nameInput = row.querySelector('.pg3-name');
-                        const qtyInput = row.querySelector('.pg3-qty');
-                        if (nameInput && change.name) {
-                            nameInput.value = change.name;
-                        }
+                document.querySelectorAll('.pg3-name').forEach((nameInput, index) => {
+                    const change = saved.pg3_changes.find(c => 
+                        c.position === nameInput.closest('tr').dataset.position &&
+                        (c.index === undefined || c.index === index)
+                    );
+                    if (change) {
+                        nameInput.value = change.name;
+                        const qtyInput = nameInput.closest('tr').querySelector('.pg3-qty');
                         if (qtyInput && change.quantity) {
                             qtyInput.value = change.quantity;
                         }
-                        updateRowStatus(row);
+                        updateRowStatus(nameInput.closest('tr'));
                     }
                 });
             }

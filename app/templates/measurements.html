@@ -292,8 +292,8 @@
     }
 
     function checkCurrent(input) {
-        const nominal = document.getElementById('nominalCurrent').value.trim();
-        const value = input.value.trim();
+        const nominal = document.getElementById('nominalCurrent').value.trim().replace(',', '.');
+        const value = input.value.trim().replace(',', '.');
         if (!value || !nominal) {
             input.classList.remove('match-ok', 'match-fail');
             updateDeviations(); return;

@@ -143,28 +143,16 @@ def extract_params_via_gpt(recognized_text: str, product_name: str) -> list:
 def extract_pg3_via_gpt(recognized_text: str, product_name: str) -> list:
     """Извлекает перечень элементов из ПГ3 через YandexGPT."""
 
-    # Если текст пустой — не отправляем в GPT
     if not recognized_text or not recognized_text.strip():
         print("⚠️ Пустой текст, GPT не вызывается")
         return []
 
-    # Разбиваем текст на части по ~2000 символов
-    chunk_size = 2000
-    chunks = []
-    for i in range(0, len(recognized_text), chunk_size):
-        chunk = recognized_text[i:i + chunk_size]
-        if chunk.strip():
-            chunks.append(chunk)
+    # Очищаем текст от кавычек
+    clean_text = recognized_text.replace('"', '').replace('"', '').replace('"', '')
 
-    print(f"Текст разбит на {len(chunks)} частей")
-
-    all_items = []
-
-    for chunk_index, chunk in enumerate(chunks):
-        print(f"\n--- Часть {chunk_index + 1} из {len(chunks)} ---")
-
-        prompt = f"""Извлеки позиции из перечня элементов (ПГ3):
-{chunk}
+    # НЕ разбиваем — отправляем целиком
+    prompt = f"""Извлеки позиции из перечня элементов (ПГ3):
+{clean_text}
 
 ПРАВИЛА ИЗВЛЕЧЕНИЯ:
 1. Номер позиции — это строка, содержащая ТОЛЬКО цифры (60, 61, 70) или цифры с точкой (01.1, 1.1).
@@ -174,57 +162,48 @@ def extract_pg3_via_gpt(recognized_text: str, product_name: str) -> list:
 5. Если строка с кодом изделия (буквы+цифры+"/") идёт БЕЗ номера перед ней — это НОВАЯ позиция с position = "-".
 6. Одиночное число (1, 2) после наименования — это КОЛИЧЕСТВО, а не номер позиции.
 7. Количество по умолчанию — "1".
+8. ВАЖНО: position — ТОЛЬКО цифры, точки или "-". НИКОГДА не вставляй туда буквы или коды изделий.
 
 ФОРМАТ ОТВЕТА:
-[{{"position": "номер или пусто", "name": "наименование", "quantity": "количество"}}]
+[{{"position": "номер или -", "name": "наименование", "quantity": "количество"}}]
 
 Верни ТОЛЬКО JSON-массив, без текста."""
 
-        text = call_gpt_with_error_handling(
-            prompt,
-            max_tokens=3000,
-            system_text="Ты — инженер. Извлекай перечень элементов в формате JSON."
-        )
+    text = call_gpt_with_error_handling(
+        prompt,
+        max_tokens=8000,
+        system_text="Ты — инженер. Извлекай перечень элементов в формате JSON."
+    )
 
-        print(f"Длина ответа: {len(text)} символов")
+    print(f"Длина ответа: {len(text)} символов")
 
-        text = text.replace("```json", "").replace("```", "").strip()
+    text = text.replace("```json", "").replace("```", "").strip()
 
-        json_match = re.search(r'\[.*\]', text, re.DOTALL)
-        if json_match:
-            try:
-                items = json.loads(json_match.group(0))
-                for item in items:
-                    if isinstance(item, dict) and "name" in item:
-                        quantity = str(item.get("quantity", "")).strip()
-                        if not quantity:
-                            quantity = "1"
+    json_match = re.search(r'\[.*\]', text, re.DOTALL)
+    if json_match:
+        try:
+            items = json.loads(json_match.group(0))
+            all_items = []
+            for item in items:
+                if isinstance(item, dict) and "name" in item:
+                    quantity = str(item.get("quantity", "")).strip()
+                    if not quantity:
+                        quantity = "1"
+                    position = str(item.get("position", "")).strip()
+                    position = re.sub(r'[A-ZА-Яa-zа-я]', '', position)
+                    position = re.sub(r'[^\d.\-]', '', position)
+                    if len(position) > 5:
+                        position = "-"
+                    name = str(item.get("name", "")).replace('"', '').replace('"', '').replace('"', '')
+                    all_items.append({
+                        "position": position,
+                        "name": name,
+                        "quantity": quantity
+                    })
+            print(f"Извлечено {len(all_items)} позиций")
+            return all_items
+        except json.JSONDecodeError as e:
+            print(f"Ошибка парсинга JSON: {e}")
+            print(f"Текст ответа: {text[:300]}...")
 
-                        position = str(item.get("position", "")).strip()
-                        # Убираем буквы из position
-                        position = re.sub(r'[A-ZА-Яa-zа-я]', '', position)
-                        # Оставляем только цифры, точки, дефисы
-                        position = re.sub(r'[^\d.\-]', '', position)
-
-                        all_items.append({
-                            "position": position,
-                            "name": item.get("name", ""),
-                            "quantity": quantity
-                        })
-                print(f"Извлечено {len(items)} позиций из части {chunk_index + 1}")
-            except json.JSONDecodeError as e:
-                print(f"Ошибка парсинга JSON: {e}")
-                print(f"Текст ответа: {text[:300]}...")
-
-    # Убираем дубликаты по position
-    seen_positions = set()
-    unique_items = []
-    for item in all_items:
-        if item["position"] and item["position"] not in seen_positions:
-            seen_positions.add(item["position"])
-            unique_items.append(item)
-        elif not item["position"]:
-            unique_items.append(item)
-
-    print(f"\nВсего извлечено {len(unique_items)} позиций")
-    return unique_items
+    return []

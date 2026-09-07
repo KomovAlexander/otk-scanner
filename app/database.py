@@ -54,6 +54,21 @@ def init_db():
         )
     """)
 
+    # Страницы ПГ3 (несколько листов)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS pg3_pages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            order_id INTEGER NOT NULL,
+            page_number INTEGER NOT NULL,
+            pg3_number TEXT DEFAULT '',
+            items TEXT DEFAULT '[]',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (order_id) REFERENCES orders(id),
+            UNIQUE(order_id, page_number)
+        )
+    """)
+
+    # Старая таблица pg3_data (оставляем для совместимости, но не используем)
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS pg3_data (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -64,6 +79,7 @@ def init_db():
             FOREIGN KEY (order_id) REFERENCES orders(id)
         )
     """)
+
     # Результаты визуального контроля
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS visual_results (
@@ -85,6 +101,7 @@ def init_db():
             FOREIGN KEY (order_id) REFERENCES orders(id)
         )
     """)
+
     # Пользователи
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS users (
@@ -99,6 +116,7 @@ def init_db():
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
+
     # Прогресс заказа
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS order_progress (
@@ -140,7 +158,6 @@ def update_order_step(order_id: int, current_step: str, completed_steps: list = 
     conn = get_db()
     cursor = conn.cursor()
 
-    # Убедимся, что запись существует
     cursor.execute(
         "INSERT OR IGNORE INTO order_progress (order_id, current_step, completed_steps) VALUES (?, 'order', '[]')",
         (order_id,)
@@ -191,18 +208,92 @@ def mark_step_completed(order_id: int, step: str, next_step: str):
     update_order_step(order_id, next_step, completed)
 
 
-# ─── Существующие функции (без изменений) ───
+# ─── Функции для работы со страницами ПГ3 ───
+
+def get_pg3_pages(order_id: int) -> list:
+    """Возвращает список страниц ПГ3."""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT * FROM pg3_pages WHERE order_id = ? ORDER BY page_number",
+        (order_id,)
+    )
+    pages = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+    return pages
+
+
+def save_pg3_page(order_id: int, page_number: int, pg3_number: str, items: list):
+    """Сохраняет одну страницу ПГ3."""
+    normalized_items = []
+    for item in items:
+        item = dict(item) if isinstance(item, dict) else {}
+        if not item.get("quantity"):
+            item["quantity"] = "1"
+        normalized_items.append(item)
+
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "INSERT OR REPLACE INTO pg3_pages (order_id, page_number, pg3_number, items) VALUES (?, ?, ?, ?)",
+        (order_id, page_number, pg3_number, json.dumps(normalized_items, ensure_ascii=False))
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_all_pg3_items(order_id: int) -> list:
+    """Объединяет позиции со всех страниц ПГ3."""
+    pages = get_pg3_pages(order_id)
+    all_items = []
+    for page in pages:
+        items = json.loads(page.get("items", "[]"))
+        all_items.extend(items)
+    return all_items
+
+
+def delete_pg3_page(page_id: int):
+    """Удаляет страницу ПГ3."""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM pg3_pages WHERE id = ?", (page_id,))
+    conn.commit()
+    conn.close()
+
+
+def clear_visual_pg3_for_order(order_id: int):
+    """Очищает только ПГ3-часть визуального контроля."""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT data FROM visual_results WHERE order_id = ?", (order_id,))
+    row = cursor.fetchone()
+
+    if row:
+        data = json.loads(row["data"])
+        data["pg3_confirmed"] = []
+        data["pg3_changes"] = []
+        cursor.execute(
+            "UPDATE visual_results SET data=?, updated_at=CURRENT_TIMESTAMP WHERE order_id=?",
+            (json.dumps(data, ensure_ascii=False), order_id)
+        )
+        print(f"✅ ПГ3-часть визуального контроля очищена для order_id={order_id}")
+    else:
+        print(f"⚠️ Визуальный контроль не найден для order_id={order_id}")
+
+    conn.commit()
+    conn.close()
+
+
+# ─── Функции для работы с заказами ───
 
 def get_or_create_order(order_number: str, product_name: str, department: str, user_id: int = None) -> int:
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute(
-        "SELECT id FROM orders WHERE order_number = ?", (order_number,))
+    cursor.execute("SELECT id FROM orders WHERE order_number = ?", (order_number,))
     existing = cursor.fetchone()
     if existing:
         if user_id:
-            cursor.execute("UPDATE orders SET user_id=? WHERE id=?",
-                           (user_id, existing["id"]))
+            cursor.execute("UPDATE orders SET user_id=? WHERE id=?", (user_id, existing["id"]))
         conn.commit()
         conn.close()
         init_order_progress(existing["id"])
@@ -220,7 +311,7 @@ def get_or_create_order(order_number: str, product_name: str, department: str, u
 
 
 def save_gch(order_id: int, gch_number: str, ral: str, sizes: list):
-    """Сохраняет данные ГЧ (удаляет старую запись для этого заказа)."""
+    """Сохраняет данные ГЧ."""
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute("DELETE FROM gch_data WHERE order_id = ?", (order_id,))
@@ -233,7 +324,7 @@ def save_gch(order_id: int, gch_number: str, ral: str, sizes: list):
 
 
 def save_g3(order_id: int, g3_number: str, params: list):
-    """Сохраняет данные Г3 (удаляет старую запись для этого заказа)."""
+    """Сохраняет данные Г3."""
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute("DELETE FROM g3_data WHERE order_id = ?", (order_id,))
@@ -246,24 +337,9 @@ def save_g3(order_id: int, g3_number: str, params: list):
 
 
 def save_pg3(order_id: int, pg3_number: str, items: list):
-    """Сохраняет данные ПГ3 (удаляет старую запись для этого заказа)."""
-    import json
-    normalized_items = []
-    for item in items:
-        item = dict(item) if isinstance(item, dict) else {}
-        if not item.get("quantity"):
-            item["quantity"] = "1"
-        normalized_items.append(item)
-
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("DELETE FROM pg3_data WHERE order_id = ?", (order_id,))
-    cursor.execute(
-        "INSERT INTO pg3_data (order_id, pg3_number, items) VALUES (?, ?, ?)",
-        (order_id, pg3_number, json.dumps(normalized_items, ensure_ascii=False)),
-    )
-    conn.commit()
-    conn.close()
+    """Сохраняет данные ПГ3 (для совместимости — в pg3_data и pg3_pages page 1)."""
+    # Сохраняем в pg3_pages как страницу 1
+    save_pg3_page(order_id, 1, pg3_number, items)
 
 
 def save_visual_results(order_id: int, data: dict):
@@ -282,8 +358,7 @@ def get_visual_results(order_id: int) -> dict:
     """Загружает результаты визуального контроля."""
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute(
-        "SELECT data FROM visual_results WHERE order_id = ?", (order_id,))
+    cursor.execute("SELECT data FROM visual_results WHERE order_id = ?", (order_id,))
     row = cursor.fetchone()
     conn.close()
     if row:
@@ -307,8 +382,7 @@ def get_measurement_results(order_id: int) -> dict:
     """Загружает результаты измерений."""
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute(
-        "SELECT data FROM measurement_results WHERE order_id = ?", (order_id,))
+    cursor.execute("SELECT data FROM measurement_results WHERE order_id = ?", (order_id,))
     row = cursor.fetchone()
     conn.close()
     if row:
@@ -317,7 +391,7 @@ def get_measurement_results(order_id: int) -> dict:
 
 
 def create_default_admin():
-    """Создаёт админа по умолчанию, если пользователей нет."""
+    """Создаёт админа по умолчанию."""
     import hashlib
     conn = get_db()
     cursor = conn.cursor()
@@ -353,7 +427,7 @@ def get_all_users() -> list:
 
 
 def create_user(login: str, password: str, first_name: str, last_name: str, middle_name: str = "", position: str = "", role: str = "tester") -> int:
-    """Создаёт пользователя и возвращает его ID."""
+    """Создаёт пользователя."""
     import hashlib
     conn = get_db()
     cursor = conn.cursor()
@@ -372,8 +446,7 @@ def delete_user(user_id: int):
     """Удаляет пользователя."""
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute(
-        "DELETE FROM users WHERE id = ? AND login != 'admin'", (user_id,))
+    cursor.execute("DELETE FROM users WHERE id = ? AND login != 'admin'", (user_id,))
     conn.commit()
     conn.close()
 
@@ -396,8 +469,7 @@ def update_user_password(user_id: int, new_password: str):
     conn = get_db()
     cursor = conn.cursor()
     password_hash = hashlib.sha256(new_password.encode()).hexdigest()
-    cursor.execute("UPDATE users SET password_hash=? WHERE id=?",
-                   (password_hash, user_id))
+    cursor.execute("UPDATE users SET password_hash=? WHERE id=?", (password_hash, user_id))
     conn.commit()
     conn.close()
 
@@ -409,14 +481,14 @@ def get_all_orders(user_id: int = None, is_admin: bool = False) -> list:
     if is_admin:
         cursor.execute("""
             SELECT o.*, 
-                   (SELECT COUNT(*) FROM pg3_data WHERE order_id = o.id) as has_pg3
+                   (SELECT COUNT(*) FROM pg3_pages WHERE order_id = o.id) as has_pg3
             FROM orders o
             ORDER BY o.id DESC
         """)
     else:
         cursor.execute("""
             SELECT o.*, 
-                   (SELECT COUNT(*) FROM pg3_data WHERE order_id = o.id) as has_pg3
+                   (SELECT COUNT(*) FROM pg3_pages WHERE order_id = o.id) as has_pg3
             FROM orders o
             WHERE o.user_id = ?
             ORDER BY o.id DESC
@@ -457,48 +529,19 @@ def delete_order(order_id: int):
     conn = get_db()
     cursor = conn.cursor()
 
-    # Удаляем все связанные данные
     cursor.execute("DELETE FROM gch_data WHERE order_id = ?", (order_id,))
     cursor.execute("DELETE FROM g3_data WHERE order_id = ?", (order_id,))
     cursor.execute("DELETE FROM pg3_data WHERE order_id = ?", (order_id,))
-    cursor.execute(
-        "DELETE FROM visual_results WHERE order_id = ?", (order_id,))
-    cursor.execute(
-        "DELETE FROM measurement_results WHERE order_id = ?", (order_id,))
-    cursor.execute(
-        "DELETE FROM order_progress WHERE order_id = ?", (order_id,))
+    cursor.execute("DELETE FROM pg3_pages WHERE order_id = ?", (order_id,))
+    cursor.execute("DELETE FROM visual_results WHERE order_id = ?", (order_id,))
+    cursor.execute("DELETE FROM measurement_results WHERE order_id = ?", (order_id,))
+    cursor.execute("DELETE FROM order_progress WHERE order_id = ?", (order_id,))
     cursor.execute("DELETE FROM orders WHERE id = ?", (order_id,))
 
     conn.commit()
     conn.close()
 
-    # Удаляем папку с фото
     import shutil
     order_dir = os.path.join("app/static/uploads", f"order_{order_id}")
     if os.path.exists(order_dir):
         shutil.rmtree(order_dir)
-
-
-def clear_visual_pg3_for_order(order_id: int):
-    """Очищает только ПГ3-часть визуального контроля."""
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("SELECT data FROM visual_results WHERE order_id = ?", (order_id,))
-    row = cursor.fetchone()
-    
-    if row:
-        data = json.loads(row["data"])
-        # Сбрасываем только ПГ3-часть
-        data["pg3_confirmed"] = []
-        data["pg3_changes"] = []
-        # Сохраняем обратно
-        cursor.execute(
-            "UPDATE visual_results SET data=?, updated_at=CURRENT_TIMESTAMP WHERE order_id=?",
-            (json.dumps(data, ensure_ascii=False), order_id)
-        )
-        print(f"✅ ПГ3-часть визуального контроля очищена для order_id={order_id}")
-    else:
-        print(f"⚠️ Визуальный контроль не найден для order_id={order_id}")
-    
-    conn.commit()
-    conn.close()

@@ -11,10 +11,14 @@ from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from app.auth import authenticate, get_current_user, require_auth
-from app.database import (get_all_orders, get_db, get_measurement_results,
-                          get_order_photos, get_order_progress,
+from app.database import (clear_visual_pg3_for_order, delete_pg3_page,
+                          get_all_orders, get_all_pg3_items, get_db,
+                          get_measurement_results, get_order_photos,
+                          get_order_progress, get_pg3_pages,
                           get_visual_results, is_order_completed,
-                          mark_step_completed, update_order_step)
+                          mark_step_completed, save_g3, save_gch,
+                          save_measurement_results, save_pg3, save_pg3_page,
+                          save_visual_results, update_order_step)
 from app.ocr_engine import scan_document
 from app.patterns import (detect_document_type, extract_g3_number,
                           extract_gch_number, extract_pg3_number,
@@ -766,7 +770,21 @@ async def api_scan_g3(request: Request, file: UploadFile = File(...)):
         "count": len(params),
         "preview_url": f"/uploads/{os.path.basename(file_path)}",
     })
-
+# ── Эндпоинт ручного сохранения Г3 ─────────────────
+@router.post("/api/save-g3")
+async def api_save_g3(request: Request):
+    data = await request.json()
+    order_id = data.get("order_id")
+    if order_id:
+        from app.database import save_g3, mark_step_completed, get_order_progress
+        save_g3(int(order_id), data.get("g3_number", ""), data.get("params", []))
+        
+        progress = get_order_progress(int(order_id))
+        if "g3" not in progress["completed_steps"]:
+            mark_step_completed(int(order_id), "g3", "pg3")
+        
+        return JSONResponse(content={"status": "ok"})
+    return JSONResponse(content={"status": "error", "message": "Нет order_id"}, status_code=400)
 
 # ── Эндпоинт ручного сохранения ПГ3 ────────────────
 @router.post("/api/save-pg3")
@@ -774,8 +792,9 @@ async def api_save_pg3(request: Request):
     data = await request.json()
     order_id = data.get("order_id")
     if order_id:
-        from app.database import save_pg3, mark_step_completed, get_order_progress
-        
+        from app.database import (get_order_progress, mark_step_completed,
+                                  save_pg3)
+
         # Просто сохраняем
         save_pg3(int(order_id), data.get("pg3_number", ""), data.get("items", []))
         
@@ -796,11 +815,13 @@ def check_pg3_page(request: Request):
         return RedirectResponse("/login", status_code=303)
 
     order_id = request.query_params.get("order_id", "")
-    pg3_data = None
     order_data = None
-    saved_photo = None
     completed_steps = []
     current_step = "pg3"
+    pages = []
+    current_page = request.query_params.get("page", "1")
+    current_page_items = []
+    current_pg3_number = ""
 
     if order_id:
         conn = get_db()
@@ -808,22 +829,27 @@ def check_pg3_page(request: Request):
         cursor.execute("SELECT * FROM orders WHERE id = ?", (int(order_id),))
         row = cursor.fetchone()
         order_data = dict(row) if row else None
-
-        cursor.execute(
-            "SELECT * FROM pg3_data WHERE order_id = ?", (int(order_id),))
-        row = cursor.fetchone()
-        pg3_data = dict(row) if row else None
-
-        if pg3_data:
-            saved_photo = get_saved_file_path(int(order_id), "pg3")
-
         conn.close()
 
         progress = get_order_progress(int(order_id))
         completed_steps = progress["completed_steps"]
         current_step = progress["current_step"]
 
-    import json
+        # Получаем страницы ПГ3
+        pages = get_pg3_pages(int(order_id))
+        
+        # Если страниц нет — создаём первую пустую
+        if not pages:
+            save_pg3_page(int(order_id), 1, "", [])
+            pages = get_pg3_pages(int(order_id))
+
+        # Находим текущую страницу
+        import json
+        for page in pages:
+            if str(page["page_number"]) == str(current_page):
+                current_pg3_number = page.get("pg3_number", "")
+                current_page_items = json.loads(page.get("items", "[]"))
+                break
 
     return templates.TemplateResponse("check_pg3.html", {
         "request": request,
@@ -831,11 +857,10 @@ def check_pg3_page(request: Request):
         "completed_steps": completed_steps,
         "order_id": order_id,
         "order_data": order_data,
-        "pg3_data": pg3_data,
-        "saved_photo": saved_photo,
-        "pg3_number": pg3_data.get("pg3_number", "") if pg3_data else "",
-        "pg3_product": order_data.get("product_name", "") if order_data else "",
-        "pg3_items": json.loads(pg3_data.get("items", "[]")) if pg3_data else [],
+        "pages": pages,
+        "current_page": current_page,
+        "current_page_items": current_page_items,
+        "current_pg3_number": current_pg3_number,
         "user": user,
     })
 
@@ -850,34 +875,38 @@ async def api_scan_pg3(request: Request, file: UploadFile = File(...)):
     file_path = save_uploaded_file_to_temp(file)
 
     order_id_str = request.query_params.get("order_id", None)
+    page_number = int(request.query_params.get("page_number", "1"))
 
-    # Общая обработка
     result = process_document_scan(file_path, "ПГ3", order_id_str)
 
     if result["status"] == "error":
         return JSONResponse(content=result)
 
-    # Продолжаем при "ok" и "warning"
     full_text = result.get("full_text", "")
     pg3_number = result.get("doc_number", "НЕ НАЙДЕНО")
     found_product = result.get("found_product", "НЕ НАЙДЕНО")
 
-    # Извлекаем позиции
     from app.param_extractor import extract_pg3_via_gpt
     try:
         items = extract_pg3_via_gpt(full_text, found_product)
     except Exception as e:
         return handle_gpt_error(e)
 
-    # Сохраняем
     if order_id_str:
-        from app.database import save_pg3, clear_visual_pg3_for_order
+        from app.database import clear_visual_pg3_for_order, save_pg3_page
         order_id = int(order_id_str)
-        save_pg3(order_id, pg3_number, items)
+        
+        # Сохраняем страницу
+        save_pg3_page(order_id, page_number, pg3_number, items)
+        
+        # Сбрасываем визуальный контроль
         clear_visual_pg3_for_order(order_id)
+
         order_dir = f"app/static/uploads/order_{order_id}"
         os.makedirs(order_dir, exist_ok=True)
-        dest_path = f"{order_dir}/pg3.jpeg"
+        dest_path = f"{order_dir}/pg3_page_{page_number}.jpeg"
+        
+        # Просто перезаписываем
         with open(file_path, "rb") as src, open(dest_path, "wb") as dst:
             shutil.copyfileobj(src, dst)
 
@@ -888,6 +917,7 @@ async def api_scan_pg3(request: Request, file: UploadFile = File(...)):
         "found_product": found_product,
         "items": items,
         "count": len(items),
+        "page_number": page_number,
         "preview_url": f"/uploads/{os.path.basename(file_path)}",
     })
 
@@ -897,52 +927,24 @@ async def api_scan_pg3(request: Request, file: UploadFile = File(...)):
 async def api_save_pg3(request: Request):
     data = await request.json()
     order_id = data.get("order_id")
+    page_number = data.get("page_number", 1)
+    
     if order_id:
-        from app.database import save_pg3, clear_visual_pg3_for_order, get_db, mark_step_completed, get_order_progress
+        from app.database import (get_order_progress, mark_step_completed,
+                                  save_pg3_page)
         
-        # Получаем старые позиции из БД
-        conn = get_db()
-        cursor = conn.cursor()
-        cursor.execute("SELECT items FROM pg3_data WHERE order_id = ?", (int(order_id),))
-        row = cursor.fetchone()
-        conn.close()
+        save_pg3_page(
+            int(order_id),
+            page_number,
+            data.get("pg3_number", ""),
+            data.get("items", [])
+        )
         
-        old_items = json.loads(row["items"]) if row and row["items"] else []
-        new_items = data.get("items", [])
-        
-        # Нормализуем для сравнения
-        def normalize_for_compare(items):
-            normalized = []
-            for item in items:
-                item = dict(item) if isinstance(item, dict) else {}
-                normalized.append({
-                    "position": str(item.get("position", "")).strip(),
-                    "name": str(item.get("name", "")).strip(),
-                    "quantity": str(item.get("quantity", "1")).strip(),
-                })
-            return normalized
-        
-        old_norm = normalize_for_compare(old_items)
-        new_norm = normalize_for_compare(new_items)
-        
-        items_changed = json.dumps(old_norm, ensure_ascii=False, sort_keys=True) != json.dumps(new_norm, ensure_ascii=False, sort_keys=True)
-        
-        # Сохраняем новые
-        save_pg3(int(order_id), data.get("pg3_number", ""), new_items)
-        
-        # Сбрасываем ПГ3-часть только если изменилось
-        if items_changed:
-            clear_visual_pg3_for_order(int(order_id))
-            print(f"✅ ПГ3 изменился — визуальный контроль сброшен")
-        else:
-            print(f"✅ ПГ3 не изменился — визуальный контроль сохранён")
-        
-        # Отмечаем шаг только если не пройден
         progress = get_order_progress(int(order_id))
         if "pg3" not in progress["completed_steps"]:
             mark_step_completed(int(order_id), "pg3", "visual")
 
-        return JSONResponse(content={"status": "ok", "changed": items_changed})
+        return JSONResponse(content={"status": "ok"})
     return JSONResponse(content={"status": "error", "message": "Нет order_id"}, status_code=400)
 
 
@@ -952,7 +954,8 @@ async def api_save_visual(request: Request):
     data = await request.json()
     order_id = data.get("order_id")
     if order_id:
-        from app.database import mark_step_completed, save_visual_results, get_order_progress
+        from app.database import (get_order_progress, mark_step_completed,
+                                  save_visual_results)
         save_visual_results(int(order_id), data)
 
         # Отмечаем шаг всегда, если ещё не пройден
@@ -1016,10 +1019,10 @@ def visual_check_page(request: Request):
     order_id = request.query_params.get("order_id", None)
     gch_data = None
     g3_data = None
-    pg3_data = None
     order_data = None
     completed_steps = []
     current_step = "visual"
+    pg3_items = []
 
     if order_id:
         conn = get_db()
@@ -1039,12 +1042,10 @@ def visual_check_page(request: Request):
         row = cursor.fetchone()
         g3_data = dict(row) if row else None
 
-        cursor.execute(
-            "SELECT * FROM pg3_data WHERE order_id = ?", (int(order_id),))
-        row = cursor.fetchone()
-        pg3_data = dict(row) if row else None
-
         conn.close()
+
+        # Объединяем позиции со всех страниц ПГ3
+        pg3_items = get_all_pg3_items(int(order_id))
 
         progress = get_order_progress(int(order_id))
         completed_steps = progress["completed_steps"]
@@ -1062,12 +1063,10 @@ def visual_check_page(request: Request):
         "gch_sizes": json.loads(gch_data.get("sizes", "[]")) if gch_data else [],
         "gch_ral": gch_data.get("ral", "") if gch_data else "",
         "g3_params": json.loads(g3_data.get("params", "[]")) if g3_data else [],
-        "pg3_items": json.loads(pg3_data.get("items", "[]")) if pg3_data else [],
+        "pg3_items": pg3_items,
         "user": user,
     })
 
-
-# ── Страница измерений ────────────────────────────
 # ── Страница измерений ────────────────────────────
 @router.get("/measurements")
 def measurements_page(request: Request):
@@ -1518,3 +1517,33 @@ def shildik_svg(request: Request):
 @router.get("/presentation")
 def presentation_page(request: Request):
     return templates.TemplateResponse("presentation.html", {"request": request})
+
+@router.get("/api/delete-pg3-page")
+def api_delete_pg3_page(request: Request):
+    user = get_current_user(request)
+    if not user:
+        return RedirectResponse("/login", status_code=303)
+    
+    page_id = request.query_params.get("page_id", None)
+    order_id = request.query_params.get("order_id", None)
+    
+    if not page_id or not order_id:
+        return RedirectResponse(f"/check-pg3?order_id={order_id}", status_code=303)
+    
+    from app.database import delete_pg3_page, get_pg3_pages, save_pg3_page
+    import json
+    
+    delete_pg3_page(int(page_id))
+    
+    pages = get_pg3_pages(int(order_id))
+    for index, page in enumerate(pages, start=1):
+        if page["page_number"] != index:
+            save_pg3_page(
+                int(order_id),
+                index,
+                page["pg3_number"],
+                json.loads(page["items"]) if page["items"] else []
+            )
+            delete_pg3_page(page["id"])
+    
+    return RedirectResponse(f"/check-pg3?order_id={order_id}&page=1", status_code=303)
