@@ -336,12 +336,6 @@ def save_g3(order_id: int, g3_number: str, params: list):
     conn.close()
 
 
-def save_pg3(order_id: int, pg3_number: str, items: list):
-    """Сохраняет данные ПГ3 (для совместимости — в pg3_data и pg3_pages page 1)."""
-    # Сохраняем в pg3_pages как страницу 1
-    save_pg3_page(order_id, 1, pg3_number, items)
-
-
 def save_visual_results(order_id: int, data: dict):
     """Сохраняет результаты визуального контроля."""
     conn = get_db()

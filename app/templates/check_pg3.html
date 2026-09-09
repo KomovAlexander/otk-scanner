@@ -546,6 +546,9 @@
     }
 
     async function goNext() {
+        console.log('Сохраняю страницу:', currentPageNumber);
+        console.log('Позиций:', currentItems.length);
+        console.log('Первая позиция:', currentItems[0]?.name);        
         const params = new URLSearchParams(window.location.search);
         const orderId = params.get('order_id');
         

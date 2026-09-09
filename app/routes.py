@@ -17,7 +17,7 @@ from app.database import (clear_visual_pg3_for_order, delete_pg3_page,
                           get_order_progress, get_pg3_pages,
                           get_visual_results, is_order_completed,
                           mark_step_completed, save_g3, save_gch,
-                          save_measurement_results, save_pg3, save_pg3_page,
+                          save_measurement_results, save_pg3_page,
                           save_visual_results, update_order_step)
 from app.ocr_engine import scan_document
 from app.patterns import (detect_document_type, extract_g3_number,
@@ -783,26 +783,6 @@ async def api_save_g3(request: Request):
         if "g3" not in progress["completed_steps"]:
             mark_step_completed(int(order_id), "g3", "pg3")
         
-        return JSONResponse(content={"status": "ok"})
-    return JSONResponse(content={"status": "error", "message": "Нет order_id"}, status_code=400)
-
-# ── Эндпоинт ручного сохранения ПГ3 ────────────────
-@router.post("/api/save-pg3")
-async def api_save_pg3(request: Request):
-    data = await request.json()
-    order_id = data.get("order_id")
-    if order_id:
-        from app.database import (get_order_progress, mark_step_completed,
-                                  save_pg3)
-
-        # Просто сохраняем
-        save_pg3(int(order_id), data.get("pg3_number", ""), data.get("items", []))
-        
-        # Отмечаем шаг только если не пройден
-        progress = get_order_progress(int(order_id))
-        if "pg3" not in progress["completed_steps"]:
-            mark_step_completed(int(order_id), "pg3", "visual")
-
         return JSONResponse(content={"status": "ok"})
     return JSONResponse(content={"status": "error", "message": "Нет order_id"}, status_code=400)
 
