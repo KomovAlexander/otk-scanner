@@ -198,8 +198,19 @@
                     <td class="param-col">2.{{ loop.index + 2 }} {{ val.name or 'Параметр' }}{% if val.position %} (поз. {{ val.position }}){% endif %}</td>
                     <td class="value-col">{{ val.value or '—' }} {{ val.unit or '' }}</td>
                     <td class="result-col">
-                        {% if val.value %}<span class="result-ok">Соотв.</span>
-                        {% else %}<span class="result-fail">—</span>{% endif %}
+                        {% if val.value and val.etalon %}
+                            {% set et = val.etalon | string | replace(',', '.') | float %}
+                            {% set vl = val.value | string | replace(',', '.') | float %}
+                            {% if et == vl %}
+                                <span class="result-ok">Соотв.</span>
+                            {% else %}
+                                <span class="result-fail">Не соотв. (эталон: {{ val.etalon }})</span>
+                            {% endif %}
+                        {% elif val.value %}
+                            <span class="result-warn">—</span>
+                        {% else %}
+                            <span class="result-fail">—</span>
+                        {% endif %}
                     </td>
                 </tr>
                 {% endfor %}
