@@ -291,16 +291,7 @@
                             {% set idle = measurements.currents | selectattr('mode', 'equalto', 'idle') | selectattr('position', 'equalto', motor_pos) | list %}
                             {% set load = measurements.currents | selectattr('mode', 'equalto', 'load') | selectattr('position', 'equalto', motor_pos) | list %}
                             
-                            {% set nominal_value = '' %}
-                            {% if measurements.get('nominal_currents') %}
-                                {% for nom in measurements.nominal_currents %}
-                                    {% if (nom.position or '') == motor_pos %}
-                                        {% set nominal_value = nom.value %}
-                                    {% endif %}
-                                {% endfor %}
-                            {% elif measurements.get('nominal_current') and motor_pos == motor_positions[0] %}
-                                {% set nominal_value = measurements.nominal_current %}
-                            {% endif %}
+                            {% set nominal_value = measurements.get('nominal_currents_dict', {}).get(motor_pos, '') %}
                             
                             <tr>
                                 <td>Холостой ход</td>

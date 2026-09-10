@@ -1268,16 +1268,10 @@ def protocol_page(request: Request):
 
         # ─── Подготавливаем допуски для измерений ───
         def parse_tolerance(tolerance_str: str, etalon: float) -> tuple:
-            """
-            Разбирает строку допуска и возвращает (нижний, верхний) допуски.
-            Примеры: "±10 бар" → (10, 10), "+5 бар" → (0, 5), "" → (5%, 5%)
-            """
             if not tolerance_str:
-                # Нет допуска — 5% от эталона, минимум 0.5
                 tol = max(0.5, abs(etalon) * 0.05)
                 return tol, tol
 
-            # Извлекаем числа из строки
             numbers = re.findall(r'[\d.]+', tolerance_str)
             if not numbers:
                 tol = max(0.5, abs(etalon) * 0.05)
@@ -1297,7 +1291,6 @@ def protocol_page(request: Request):
         # Подготавливаем данные измерений с допусками
         if measurement_data.get('g3_values'):
             for m_val in measurement_data['g3_values']:
-                # Находим параметр из Г3 по name и position
                 matching = None
                 for g3_param in g3_params:
                     if (g3_param.get('name') == m_val.get('name') and
@@ -1312,8 +1305,7 @@ def protocol_page(request: Request):
                             matching.get('tolerance', ''), etalon)
                         m_val['lower_tol'] = lower_tol
                         m_val['upper_tol'] = upper_tol
-                        m_val['tolerance_display'] = matching.get(
-                            'tolerance', '')
+                        m_val['tolerance_display'] = matching.get('tolerance', '')
                     except (ValueError, TypeError):
                         m_val['lower_tol'] = 0
                         m_val['upper_tol'] = 0
@@ -1322,6 +1314,17 @@ def protocol_page(request: Request):
                     m_val['lower_tol'] = 0
                     m_val['upper_tol'] = 0
                     m_val['tolerance_display'] = ''
+
+        # ─── Подготавливаем номинальные токи как dict по position ───
+        if measurement_data:
+            nominal_dict = {}
+            if measurement_data.get('nominal_currents'):
+                for nom in measurement_data['nominal_currents']:
+                    pos = nom.get('position', '')
+                    nominal_dict[pos] = nom.get('value', '')
+            elif measurement_data.get('nominal_current'):
+                nominal_dict[''] = measurement_data['nominal_current']
+            measurement_data['nominal_currents_dict'] = nominal_dict
 
         progress = get_order_progress(int(order_id))
         completed_steps = progress["completed_steps"]
