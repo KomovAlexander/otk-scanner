@@ -253,9 +253,10 @@
         {% for p in g3_params %}
             {% if p.type == "motor_voltage" %}
             <div class="form-group">
-                <label>Напряжение двигателя (эталон: {{ p.value }} {{ p.unit }})</label>
+                <label>Напряжение двигателя{% if p.position %} (поз. {{ p.position }}){% endif %} (эталон: {{ p.value }} {{ p.unit }})</label>
                 <input type="text" class="g3-input" data-etalon="{{ p.value }}"
                        data-name="Напряжение двигателя" data-unit="{{ p.unit }}"
+                       data-position="{{ p.position }}"
                        placeholder="Введите значение" oninput="checkG3Value(this)">
                 <div class="comment-box">
                     <textarea placeholder="Причина отклонения..."></textarea>
@@ -263,9 +264,10 @@
             </div>
             {% elif p.type == "motor_power" %}
             <div class="form-group">
-                <label>Мощность двигателя (эталон: {{ p.value }} {{ p.unit }})</label>
+                <label>Мощность двигателя{% if p.position %} (поз. {{ p.position }}){% endif %} (эталон: {{ p.value }} {{ p.unit }})</label>
                 <input type="text" class="g3-input" data-etalon="{{ p.value }}"
                        data-name="Мощность двигателя" data-unit="{{ p.unit }}"
+                       data-position="{{ p.position }}"
                        placeholder="Введите значение" oninput="checkG3Value(this)">
                 <div class="comment-box">
                     <textarea placeholder="Причина отклонения..."></textarea>
@@ -273,9 +275,10 @@
             </div>
             {% elif p.type == "motor_rpm" %}
             <div class="form-group">
-                <label>Частота вращения (эталон: {{ p.value }} {{ p.unit }})</label>
+                <label>Частота вращения{% if p.position %} (поз. {{ p.position }}){% endif %} (эталон: {{ p.value }} {{ p.unit }})</label>
                 <input type="text" class="g3-input" data-etalon="{{ p.value }}"
                        data-name="Частота вращения" data-unit="{{ p.unit }}"
+                       data-position="{{ p.position }}"
                        placeholder="Введите значение" oninput="checkG3Value(this)">
                 <div class="comment-box">
                     <textarea placeholder="Причина отклонения..."></textarea>
@@ -286,6 +289,7 @@
                 <label>Напряжение катушек (эталон: {{ p.value }} {{ p.unit }})</label>
                 <input type="text" class="g3-input" data-etalon="{{ p.value }}"
                        data-name="Напряжение катушек" data-unit="{{ p.unit }}"
+                       data-position="{{ p.position }}"
                        placeholder="Введите значение" oninput="checkG3Value(this)">
                 <div class="comment-box">
                     <textarea placeholder="Причина отклонения..."></textarea>
@@ -559,14 +563,16 @@
         
         document.querySelectorAll('.g3-input').forEach(input => {
             const name = input.dataset.name;
+            const position = input.dataset.position || '';  // ← ДОБАВИТЬ
             const etalon = input.dataset.etalon;
             const unit = input.dataset.unit || '';
             const value = input.value.trim();
             const comment = input.parentElement.querySelector('textarea')?.value || '';
+            const posStr = position ? ` (поз. ${position})` : '';  // ← ДОБАВИТЬ
             if (!value) {
-                deviations.push(`⚙️ ${name}: не заполнено (эталон: ${etalon} ${unit})`);
+                deviations.push(`⚙️ ${name}${posStr}: не заполнено (эталон: ${etalon} ${unit})`);
             } else if (input.classList.contains('match-fail')) {
-                deviations.push(`⚙️ ${name}: ожидается ${etalon} ${unit}, введено ${value} ${unit}${comment ? ' — ' + comment : ''}`);
+                deviations.push(`⚙️ ${name}${posStr}: ожидается ${etalon} ${unit}, введено ${value} ${unit}${comment ? ' — ' + comment : ''}`);
             }
         });
 
@@ -627,6 +633,7 @@
                 value: input.value.trim(),
                 etalon: input.dataset.etalon,
                 unit: input.dataset.unit || '',
+                position: input.dataset.position || '',
                 comment: input.parentElement.querySelector('textarea')?.value || ''
             })),
             pg3_confirmed: Array.from(document.querySelectorAll('.pg3-checkbox')).map((cb, index) => ({

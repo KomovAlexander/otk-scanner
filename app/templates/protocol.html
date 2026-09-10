@@ -42,6 +42,7 @@
     .result-fail { color: #f44336; }
     .result-warn { color: #ff9800; }
     .sub-title { color: #ff6b35; font-weight: 600; font-size: 14px; margin-top: 16px; margin-bottom: 8px; }
+    .motor-title { color: #ff6b35; font-weight: 600; font-size: 13px; padding-top: 8px; }
 
     .signatures {
         margin-top: 40px;
@@ -85,12 +86,12 @@
         .check-table th { color: #000; }
         .check-table .param-col { color: #000; }
         .sub-title { color: #000; }
+        .motor-title { color: #000; }
         .result-ok { color: #000; }
         .result-fail { color: #000; font-weight: 700; }
         .result-warn { color: #000; }
         .signature-line { border-color: #000; }
         .signature-label { color: #000; }
-    }
     }
 </style>
 {% endblock %}
@@ -101,26 +102,27 @@
     <div class="protocol-header">
         <div style="display: flex; justify-content: space-between; align-items: flex-start;">
             <div style="flex: 1; text-align: center;">
-                <h1 style="font-size: 20px; font-weight: 700; margin-bottom: 8px; color: #ff6b35;">ПРОТОКОЛ ИСПЫТАНИЙ</h1>
-                <div style="font-size: 16px; color: #fff; margin-bottom: 4px;">{{ order.product_name if order else '—' }}</div>
-                <div style="font-size: 13px; color: #888;">(наименование оборудования)</div>
+                <h1>ПРОТОКОЛ ИСПЫТАНИЙ</h1>
+                <div class="product-name">{{ order.product_name if order else '—' }}</div>
+                <div class="subtitle">(наименование оборудования)</div>
             </div>
-            <div style="text-align: right; font-size: 13px; color: #888; line-height: 1.8; min-width: 200px;">
+            <div class="header-right">
                 <div style="display: flex; justify-content: space-between; gap: 12px;">
                     <span>Заказ №:</span>
-                    <strong style="color: #fff;">{{ order.order_number if order else '—' }}</strong>
+                    <strong>{{ order.order_number if order else '—' }}</strong>
                 </div>
                 <div style="display: flex; justify-content: space-between; gap: 12px;">
                     <span>Серийный номер:</span>
-                    <strong style="color: #fff;">{{ serial_number or '_______________' }}</strong>
+                    <strong>{{ serial_number or '_______________' }}</strong>
                 </div>
                 <div style="display: flex; justify-content: space-between; gap: 12px;">
                     <span>Дата:</span>
-                    <strong style="color: #fff;">{{ test_date or '—' }}</strong>
+                    <strong>{{ test_date or '—' }}</strong>
                 </div>
             </div>
         </div>
     </div>
+
     <!-- Единый блок -->
     <div class="protocol-section">
         <table class="check-table">
@@ -266,20 +268,46 @@
                 {% endfor %}
                 {% endif %}
 
-                {% if measurements.get('currents') %}
-                <tr><td class="param-col" colspan="3" style="color:#ff6b35; font-weight:600; padding-top:8px;">Электродвигатели</td></tr>
+                <!-- Электродвигатели — для каждого своя таблица -->
+                {% if measurements.get('currents') and measurements.get('currents') | length > 0 %}
+                
+                {% set motor_positions = [] %}
+                {% for curr in measurements.currents %}
+                    {% if (curr.position or "") not in motor_positions %}
+                        {% set _ = motor_positions.append(curr.position or "") %}
+                    {% endif %}
+                {% endfor %}
+                
+                {% for motor_pos in motor_positions %}
+                <tr>
+                    <td class="param-col motor-title" colspan="3">
+                        Электродвигатель{% if motor_pos %} (поз. {{ motor_pos }}){% endif %}
+                    </td>
+                </tr>
                 <tr>
                     <td class="param-col" colspan="3">
                         <table class="check-table sub-table" style="margin:0;">
                             <thead><tr><th>Режим</th><th>Фаза A</th><th>Фаза B</th><th>Фаза C</th><th>Номинал</th></tr></thead>
-                            {% set idle = measurements.currents | selectattr('mode', 'equalto', 'idle') | list %}
-                            {% set load = measurements.currents | selectattr('mode', 'equalto', 'load') | list %}
+                            {% set idle = measurements.currents | selectattr('mode', 'equalto', 'idle') | selectattr('position', 'equalto', motor_pos) | list %}
+                            {% set load = measurements.currents | selectattr('mode', 'equalto', 'load') | selectattr('position', 'equalto', motor_pos) | list %}
+                            
+                            {% set nominal_value = '' %}
+                            {% if measurements.get('nominal_currents') %}
+                                {% for nom in measurements.nominal_currents %}
+                                    {% if (nom.position or '') == motor_pos %}
+                                        {% set nominal_value = nom.value %}
+                                    {% endif %}
+                                {% endfor %}
+                            {% elif measurements.get('nominal_current') and motor_pos == motor_positions[0] %}
+                                {% set nominal_value = measurements.nominal_current %}
+                            {% endif %}
+                            
                             <tr>
                                 <td>Холостой ход</td>
                                 <td>{{ idle[0].value if idle[0] else '—' }} А</td>
                                 <td>{{ idle[1].value if idle[1] else '—' }} А</td>
                                 <td>{{ idle[2].value if idle[2] else '—' }} А</td>
-                                <td rowspan="2">{{ measurements.nominal_current or '—' }} А</td>
+                                <td rowspan="2">{{ nominal_value or '—' }} А</td>
                             </tr>
                             <tr>
                                 <td>Под нагрузкой</td>
@@ -290,6 +318,7 @@
                         </table>
                     </td>
                 </tr>
+                {% endfor %}
                 {% endif %}
 
                 <tr><td class="param-col" colspan="3" style="color:#ff6b35; font-weight:600; padding-top:8px;">Прочее</td></tr>
@@ -373,7 +402,8 @@
         <button onclick="printDeviations('{{ order.order_number }}', '{{ order.product_name }}')" style="padding: 10px 20px; background: #4caf50; color: #fff; border: none; border-radius: 6px; cursor: pointer; font-size: 14px;">🖨️ Печать</button>
     </div>
     {% endif %}
-    <button class="btn-next" onclick="openShildikModal({{ order.id }})" style="display: block; width: 100%; padding: 14px; margin-top: 10px; background: #4caf50; color: #fff; border: none; border-radius: 8px; font-size: 16px; font-weight: 600; cursor: pointer;">Шильдик</button>    <button class="btn-print" onclick="window.print()">Печать протокола</button>
+    <button class="btn-next" onclick="openShildikModal({{ order.id }})" style="display: block; width: 100%; padding: 14px; margin-top: 10px; background: #4caf50; color: #fff; border: none; border-radius: 8px; font-size: 16px; font-weight: 600; cursor: pointer;">Шильдик</button>
+    <button class="btn-print" onclick="window.print()">Печать протокола</button>
     <button class="btn-next" onclick="goToPhoto()">Далее — фотографирование</button>
 </div>
 <!-- Модалка шильдика -->
@@ -385,6 +415,7 @@
     </div>
 </div>
 {% endblock %}
+
 {% block extra_js %}
 <script>
     function goToPhoto() {
@@ -429,7 +460,6 @@
         printWindow.document.write('<p style="color: #000;"><strong>Изделие:</strong> ' + productName + '</p>');
         printWindow.document.write('<hr style="border-color: #000;">');
         
-        // Копируем список и заменяем цвета на чёрный
         const printList = list.replace(/color:\s*#ffaaaa/g, 'color: #000');
         
         printWindow.document.write(printList);

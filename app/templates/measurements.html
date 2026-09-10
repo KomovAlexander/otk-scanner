@@ -75,6 +75,19 @@
         resize: vertical;
         min-height: 50px;
     }
+    .motor-block {
+        background: #1e2128;
+        border: 1px solid #2a2d35;
+        border-radius: 12px;
+        padding: 16px;
+        margin-bottom: 16px;
+    }
+    .motor-header {
+        font-size: 15px;
+        font-weight: 600;
+        color: #ff6b35;
+        margin-bottom: 12px;
+    }
     @media (max-width: 480px) {
         .form-row { flex-direction: column; gap: 0; }
         .section-title { font-size: 14px; }
@@ -166,40 +179,58 @@
         {% endfor %}
     {% endif %}
 
-    <!-- Ток по фазам -->
-    <div class="section-title">🔌 Ток по фазам</div>
-    <div class="form-group">
-        <label>Номинальный ток (А)</label>
-        <input type="text" id="nominalCurrent" placeholder="Введите номинальный ток" oninput="autoSave()">
+    <!-- Ток по фазам — для каждого двигателя -->
+    {% set motor_positions = [] %}
+    {% for p in g3_params if p.type == "motor_power" %}
+        {% if p.position and p.position not in motor_positions %}
+            {% set _ = motor_positions.append(p.position) %}
+        {% endif %}
+    {% endfor %}
+
+    {% if not motor_positions %}
+        {% set _ = motor_positions.append("") %}
+    {% endif %}
+
+    {% for motor_pos in motor_positions %}
+    <div class="motor-block">
+        <div class="motor-header">
+            🔌 Ток по фазам{% if motor_pos %} — двигатель (поз. {{ motor_pos }}){% endif %}
+        </div>
+        <div class="form-group">
+            <label>Номинальный ток (А)</label>
+            <input type="text" class="nominal-current" data-position="{{ motor_pos }}" 
+                   placeholder="Введите номинальный ток" oninput="onNominalChange(this)">
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label>Фаза A — холостой ход (А)</label>
+                <input type="text" class="current-input" data-phase="A" data-mode="idle" data-position="{{ motor_pos }}" oninput="checkCurrent(this)">
+            </div>
+            <div class="form-group">
+                <label>Фаза B — холостой ход (А)</label>
+                <input type="text" class="current-input" data-phase="B" data-mode="idle" data-position="{{ motor_pos }}" oninput="checkCurrent(this)">
+            </div>
+            <div class="form-group">
+                <label>Фаза C — холостой ход (А)</label>
+                <input type="text" class="current-input" data-phase="C" data-mode="idle" data-position="{{ motor_pos }}" oninput="checkCurrent(this)">
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label>Фаза A — под нагрузкой (А)</label>
+                <input type="text" class="current-input" data-phase="A" data-mode="load" data-position="{{ motor_pos }}" oninput="checkCurrent(this)">
+            </div>
+            <div class="form-group">
+                <label>Фаза B — под нагрузкой (А)</label>
+                <input type="text" class="current-input" data-phase="B" data-mode="load" data-position="{{ motor_pos }}" oninput="checkCurrent(this)">
+            </div>
+            <div class="form-group">
+                <label>Фаза C — под нагрузкой (А)</label>
+                <input type="text" class="current-input" data-phase="C" data-mode="load" data-position="{{ motor_pos }}" oninput="checkCurrent(this)">
+            </div>
+        </div>
     </div>
-    <div class="form-row">
-        <div class="form-group">
-            <label>Фаза A — холостой ход (А)</label>
-            <input type="text" class="current-input" data-phase="A" data-mode="idle" oninput="checkCurrent(this)">
-        </div>
-        <div class="form-group">
-            <label>Фаза B — холостой ход (А)</label>
-            <input type="text" class="current-input" data-phase="B" data-mode="idle" oninput="checkCurrent(this)">
-        </div>
-        <div class="form-group">
-            <label>Фаза C — холостой ход (А)</label>
-            <input type="text" class="current-input" data-phase="C" data-mode="idle" oninput="checkCurrent(this)">
-        </div>
-    </div>
-    <div class="form-row">
-        <div class="form-group">
-            <label>Фаза A — под нагрузкой (А)</label>
-            <input type="text" class="current-input" data-phase="A" data-mode="load" oninput="checkCurrent(this)">
-        </div>
-        <div class="form-group">
-            <label>Фаза B — под нагрузкой (А)</label>
-            <input type="text" class="current-input" data-phase="B" data-mode="load" oninput="checkCurrent(this)">
-        </div>
-        <div class="form-group">
-            <label>Фаза C — под нагрузкой (А)</label>
-            <input type="text" class="current-input" data-phase="C" data-mode="load" oninput="checkCurrent(this)">
-        </div>
-    </div>
+    {% endfor %}
 
     <!-- Шум -->
     <div class="section-title">🔊 Шумовое давление</div>
@@ -291,15 +322,29 @@
         updateDeviations(); checkAllFields(); autoSave();
     }
 
+    function onNominalChange(input) {
+        // Пересчитываем все токи этого двигателя
+        const position = input.dataset.position || '';
+        document.querySelectorAll('.current-input').forEach(curr => {
+            if ((curr.dataset.position || '') === position) {
+                checkCurrent(curr);
+            }
+        });
+        autoSave();
+    }
+
     function checkCurrent(input) {
-        const nominal = document.getElementById('nominalCurrent').value.trim().replace(',', '.');
+        const position = input.dataset.position || '';
+        const nominalInput = document.querySelector(`.nominal-current[data-position="${position}"]`);
+        const nominal = nominalInput ? nominalInput.value.trim().replace(',', '.') : '';
         const value = input.value.trim().replace(',', '.');
+        
         if (!value || !nominal) {
             input.classList.remove('match-ok', 'match-fail');
             updateDeviations(); return;
         }
-        const limit = parseFloat(nominal.replace(',', '.')) * 1.1;
-        const val = parseFloat(value.replace(',', '.'));
+        const limit = parseFloat(nominal) * 1.1;
+        const val = parseFloat(value);
         if (!isNaN(val) && val <= limit) {
             input.classList.add('match-ok'); input.classList.remove('match-fail');
         } else {
@@ -335,6 +380,8 @@
 
     function updateDeviations() {
         deviations = [];
+        
+        // Параметры Г3
         document.querySelectorAll('.g3-input.match-fail').forEach(input => {
             const name = input.dataset.name;
             const position = input.dataset.position || '';
@@ -345,22 +392,30 @@
             const posStr = position ? ` (поз. ${position})` : '';
             deviations.push(`⚙️ ${name}${posStr}: ожидается ${etalon} ${unit}, введено ${value} ${unit}${comment ? ' — ' + comment : ''}`);
         });
+        
+        // Токи
         document.querySelectorAll('.current-input.match-fail').forEach(input => {
             const phase = input.dataset.phase;
             const mode = input.dataset.mode === 'idle' ? 'холостой' : 'нагрузка';
+            const position = input.dataset.position || '';
             const value = input.value.trim().replace(',', '.');
-            const nominal = document.getElementById('nominalCurrent').value.trim().replace(',', '.');
+            const nominalInput = document.querySelector(`.nominal-current[data-position="${position}"]`);
+            const nominal = nominalInput ? nominalInput.value.trim().replace(',', '.') : '';
             const val = parseFloat(value);
             const nom = parseFloat(nominal);
             const percent = nom > 0 ? ((val - nom) / nom * 100).toFixed(1) : 0;
-            deviations.push(`🔌 Ток фаза ${phase} (${mode}): ${value} А превышает номинал ${nominal} А на ${percent}%`);
+            const posStr = position ? ` (поз. ${position})` : '';
+            deviations.push(`🔌 Ток${posStr} фаза ${phase} (${mode}): ${value} А превышает номинал ${nominal} А на ${percent}%`);
         });
+        
+        // Масло
         const fluidSelect = document.getElementById('fluidSelect');
         const fluidCustom = document.getElementById('fluidCustom');
         if (fluidSelect && fluidSelect.value === 'другое' && fluidCustom && fluidCustom.value.trim()) {
             const etalon = fluidSelect.dataset.etalon;
             deviations.push(`🛢️ Масло: ожидается ${etalon}, замена на ${fluidCustom.value.trim()}`);
         }
+        
         const block = document.getElementById('deviationsBlock');
         const list = document.getElementById('deviationsList');
         if (deviations.length > 0) {
@@ -374,8 +429,11 @@
     function checkAllFields() {
         let allFilled = true;
         const btnNext = document.getElementById('btnNext');
+        
         document.querySelectorAll('.g3-input').forEach(input => { if (!input.value.trim()) allFilled = false; });
         document.querySelectorAll('.current-input').forEach(input => { if (!input.value.trim()) allFilled = false; });
+        document.querySelectorAll('.nominal-current').forEach(input => { if (!input.value.trim()) allFilled = false; });
+        
         const fluidSelect = document.getElementById('fluidSelect');
         const fluidCustom = document.getElementById('fluidCustom');
         if (fluidSelect && !fluidSelect.value) allFilled = false;
@@ -410,11 +468,15 @@
                 comment: input.parentElement.querySelector('textarea')?.value || ''
             })),
             currents: Array.from(document.querySelectorAll('.current-input')).map(input => ({
+                position: input.dataset.position || '',
                 phase: input.dataset.phase,
                 mode: input.dataset.mode,
                 value: input.value.trim()
             })),
-            nominal_current: document.getElementById('nominalCurrent')?.value || '',
+            nominal_currents: Array.from(document.querySelectorAll('.nominal-current')).map(input => ({
+                position: input.dataset.position || '',
+                value: input.value.trim()
+            })),
             noise_idle: document.getElementById('noiseIdle')?.value || '',
             noise_load: document.getElementById('noiseLoad')?.value || '',
             fluid: document.getElementById('fluidSelect')?.value || '',
@@ -463,18 +525,43 @@
                         input.value = savedParam.value;
                         input.dispatchEvent(new Event('input'));
                     }
-                    // НЕ подставляем эталон автоматически
                 });
             }
+            
+            // Токи
             if (saved.currents) {
-                document.querySelectorAll('.current-input').forEach((input, i) => {
-                    if (saved.currents[i] && saved.currents[i].value) {
-                        input.value = saved.currents[i].value;
+                document.querySelectorAll('.current-input').forEach((input) => {
+                    const savedCurrent = saved.currents.find(c => 
+                        c.position === (input.dataset.position || '') &&
+                        c.phase === input.dataset.phase &&
+                        c.mode === input.dataset.mode
+                    );
+                    if (savedCurrent && savedCurrent.value) {
+                        input.value = savedCurrent.value;
                         input.dispatchEvent(new Event('input'));
                     }
                 });
             }
-            if (saved.nominal_current) document.getElementById('nominalCurrent').value = saved.nominal_current;
+            
+            // Номинальные токи
+            if (saved.nominal_currents) {
+                document.querySelectorAll('.nominal-current').forEach((input) => {
+                    const savedNominal = saved.nominal_currents.find(n => 
+                        n.position === (input.dataset.position || '')
+                    );
+                    if (savedNominal && savedNominal.value) {
+                        input.value = savedNominal.value;
+                        input.dispatchEvent(new Event('input'));
+                    }
+                });
+            }
+            
+            // Для обратной совместимости (старый формат)
+            if (saved.nominal_current && !saved.nominal_currents) {
+                const firstNominal = document.querySelector('.nominal-current');
+                if (firstNominal) firstNominal.value = saved.nominal_current;
+            }
+            
             if (saved.noise_idle) document.getElementById('noiseIdle').value = saved.noise_idle;
             if (saved.noise_load) document.getElementById('noiseLoad').value = saved.noise_load;
             if (saved.fluid) {
@@ -485,11 +572,10 @@
             
             isRestoring = false;
             
-            // Пересохраняем только если есть хоть какие-то данные
             const hasAnyData = 
                 document.querySelector('.g3-input')?.value ||
                 document.querySelector('.current-input')?.value ||
-                document.getElementById('nominalCurrent')?.value ||
+                document.querySelector('.nominal-current')?.value ||
                 document.getElementById('noiseIdle')?.value ||
                 document.getElementById('noiseLoad')?.value;
             

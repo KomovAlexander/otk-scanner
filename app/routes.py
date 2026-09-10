@@ -953,7 +953,7 @@ async def api_save_measurements(request: Request):
     data = await request.json()
     order_id = data.get("order_id")
     if order_id:
-        from app.database import mark_step_completed, save_measurement_results
+        from app.database import mark_step_completed, save_measurement_results, get_order_progress
         save_measurement_results(int(order_id), data)
 
         # Проверяем, ВСЕ ли обязательные поля заполнены
@@ -966,11 +966,16 @@ async def api_save_measurements(request: Request):
 
         # 2. Все токи заполнены
         currents = data.get("currents", [])
-        if not currents or len(currents) < 6 or any(not c.get("value") for c in currents):
+        if not currents or any(not c.get("value") for c in currents):
             all_filled = False
 
-        # 3. Номинальный ток заполнен
-        if not data.get("nominal_current"):
+        # 3. Все номинальные токи заполнены
+        nominal_currents = data.get("nominal_currents", [])
+        if not nominal_currents or any(not n.get("value") for n in nominal_currents):
+            all_filled = False
+
+        # Обратная совместимость: если старый формат (nominal_current без массива)
+        if not nominal_currents and not data.get("nominal_current"):
             all_filled = False
 
         # 4. Шум заполнен
@@ -983,7 +988,9 @@ async def api_save_measurements(request: Request):
 
         # Только если ВСЁ заполнено — отмечаем шаг пройденным
         if all_filled:
-            mark_step_completed(int(order_id), "measurements", "protocol")
+            progress = get_order_progress(int(order_id))
+            if "measurements" not in progress["completed_steps"]:
+                mark_step_completed(int(order_id), "measurements", "protocol")
 
         return JSONResponse(content={"status": "ok", "all_filled": all_filled})
     return JSONResponse(content={"status": "error", "message": "Нет order_id"}, status_code=400)
