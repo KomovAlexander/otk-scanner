@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+
+{% block title %}Запросы — Админка{% endblock %}
+
+{% block extra_css %}
+<style>
+    .requests-container { max-width: 1100px; margin: 0 auto; padding: 24px 20px; }
+    .requests-container h1 { color: #ff6b35; font-size: 22px; margin-bottom: 20px; }
+    .requests-container h2 { color: #ff6b35; font-size: 16px; margin: 24px 0 12px; }
+
+    .req-card {
+        background: #1e2128;
+        border: 1px solid #2a2d35;
+        border-radius: 12px;
+        padding: 16px 20px;
+        margin-bottom: 12px;
+    }
+    .req-card.pending { border-color: #ff9800; }
+    .req-head {
+        display: flex; justify-content: space-between; align-items: flex-start;
+        gap: 16px; flex-wrap: wrap;
+    }
+    .req-title { font-size: 15px; font-weight: 600; color: #fff; margin-bottom: 4px; }
+    .req-meta { font-size: 12px; color: #888; line-height: 1.6; }
+    .req-meta strong { color: #ccc; }
+    .req-reason {
+        margin-top: 12px; padding: 10px 14px;
+        background: #2a2d35; border-radius: 8px;
+        font-size: 14px; color: #e0e0e0;
+        border-left: 3px solid #ff9800;
+    }
+    .req-actions { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+    .btn-approve { background: #4caf50; color: #fff; padding: 8px 16px; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; }
+    .btn-approve:hover { background: #388e3c; }
+    .btn-reject { background: #f44336; color: #fff; padding: 8px 16px; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; }
+    .btn-reject:hover { background: #d32f2f; }
+    .badge { padding: 3px 10px; border-radius: 6px; font-size: 11px; font-weight: 600; }
+    .badge-pending { background: #ff9800; color: #fff; }
+    .badge-approved { background: #4caf50; color: #fff; }
+    .badge-rejected { background: #f44336; color: #fff; }
+    .badge-cancelled { background: #555; color: #ccc; }
+    .empty { color: #888; padding: 20px; text-align: center; }
+
+    .back-link {
+        display: inline-block; color: #ff6b35; text-decoration: none;
+        font-size: 14px; margin-bottom: 12px;
+    }
+    .back-link:hover { text-decoration: underline; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="requests-container">
+    <a href="/admin" class="back-link">← Назад в админку</a>
+    <h1>📩 Запросы разрешений</h1>
+
+    <h2>Ожидают ответа ({{ pending | length }})</h2>
+    {% if pending %}
+        {% for r in pending %}
+        <div class="req-card pending">
+            <div class="req-head">
+                <div>
+                    <div class="req-title">Заказ {{ r.order_number }} — {{ r.product_name }}</div>
+                    <div class="req-meta">
+                        Тип: <strong>работа без ГЧ</strong><br>
+                        От: <strong>{{ r.last_name }} {{ r.first_name }}</strong> ({{ r.login }})<br>
+                        Время: {{ r.created_at }}
+                    </div>
+                </div>
+                <span class="badge badge-pending">⏳ Ожидает</span>
+            </div>
+            <div class="req-reason">{{ r.reason }}</div>
+            <form method="post" action="/admin/requests/{{ r.id }}/resolve" class="req-actions">
+                <input type="text" name="comment" placeholder="Комментарий (необязательно)"
+                       style="flex:1; min-width:200px; padding:8px 12px; background:#2a2d35; border:1px solid #3a3d45; border-radius:6px; color:#fff; font-size:13px;">
+                <button type="submit" name="status" value="approved" class="btn-approve"
+                        onclick="return confirm('Разрешить работу без ГЧ по заказу {{ r.order_number }}?');">
+                    ✅ Разрешить
+                </button>
+                <button type="submit" name="status" value="rejected" class="btn-reject"
+                        onclick="return confirm('Отклонить запрос по заказу {{ r.order_number }}?');">
+                    ❌ Отклонить
+                </button>
+            </form>
+        </div>
+        {% endfor %}
+    {% else %}
+        <div class="empty">Нет активных запросов 🎉</div>
+    {% endif %}
+
+    <h2>История (последние 50)</h2>
+    {% if history %}
+        {% for r in history %}
+        <div class="req-card">
+            <div class="req-head">
+                <div>
+                    <div class="req-title">Заказ {{ r.order_number }} — {{ r.product_name }}</div>
+                    <div class="req-meta">
+                        От: <strong>{{ r.last_name }} {{ r.first_name }}</strong> ({{ r.login }})<br>
+                        Создан: {{ r.created_at }}
+                        {% if r.resolved_at %}<br>Закрыт: {{ r.resolved_at }}{% endif %}
+                        {% if r.admin_comment %}<br>Комментарий: {{ r.admin_comment }}{% endif %}
+                    </div>
+                </div>
+                <span class="badge badge-{{ r.status }}">
+                    {% if r.status == 'pending' %}⏳ Ожидает
+                    {% elif r.status == 'approved' %}✅ Разрешено
+                    {% elif r.status == 'rejected' %}❌ Отклонено
+                    {% else %}— Отменён{% endif %}
+                </span>
+            </div>
+            <div class="req-reason" style="border-left-color:#555;">{{ r.reason }}</div>
+        </div>
+        {% endfor %}
+    {% else %}
+        <div class="empty">История пуста</div>
+    {% endif %}
+</div>
+{% endblock %}

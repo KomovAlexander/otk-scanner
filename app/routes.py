@@ -547,6 +547,7 @@ def check_gch_page(request: Request):
     saved_photo = None
     completed_steps = []
     current_step = "gch"
+    permission = None
 
     if order_id:
         conn = get_db()
@@ -570,6 +571,19 @@ def check_gch_page(request: Request):
         completed_steps = progress["completed_steps"]
         current_step = progress["current_step"]
 
+        # Статус запроса на работу без ГЧ
+        from app.database import get_active_permission, mark_step_completed
+        permission = get_active_permission(int(order_id), "no_gch")
+
+        # Если разрешено работать без ГЧ — считаем шаг "gch" пройденным
+        if permission and permission["status"] == "approved":
+            if "gch" not in completed_steps:
+                mark_step_completed(int(order_id), "gch", "g3")
+                # Перечитываем прогресс, чтобы шаблон увидел обновлённые данные
+                progress = get_order_progress(int(order_id))
+                completed_steps = progress["completed_steps"]
+                current_step = progress["current_step"]
+
     import json
 
     return templates.TemplateResponse("check_gch.html", {
@@ -584,6 +598,7 @@ def check_gch_page(request: Request):
         "gch_product": order_data.get("product_name", "") if order_data else "",
         "gch_ral": gch_data.get("ral", "") if gch_data else "",
         "gch_sizes": json.loads(gch_data.get("sizes", "[]")) if gch_data else [],
+        "permission": permission,
         "user": user,
     })
 
@@ -1040,6 +1055,9 @@ def visual_check_page(request: Request):
 
     import json
 
+    # Если в gch_data стоит метка "БЕЗ ГЧ" — скрываем весь раздел ГЧ
+    gch_is_absent = bool(gch_data and gch_data.get("gch_number") == "БЕЗ ГЧ")
+
     return templates.TemplateResponse("visual_check.html", {
         "request": request,
         "current_step": current_step,
@@ -1047,6 +1065,7 @@ def visual_check_page(request: Request):
         "order_id": order_id,
         "order": order_data,
         "gch": gch_data,
+        "gch_is_absent": gch_is_absent,
         "gch_sizes": json.loads(gch_data.get("sizes", "[]")) if gch_data else [],
         "gch_ral": gch_data.get("ral", "") if gch_data else "",
         "g3_params": json.loads(g3_data.get("params", "[]")) if g3_data else [],
@@ -1537,3 +1556,48 @@ def api_delete_pg3_page(request: Request):
             delete_pg3_page(page["id"])
     
     return RedirectResponse(f"/check-pg3?order_id={order_id}&page=1", status_code=303)
+
+
+
+# ── Запросы разрешений ─────────────────────────────
+
+@router.post("/api/request-permission")
+async def api_request_permission(request: Request):
+    """Испытатель просит разрешение (например, работать без ГЧ)."""
+    user = get_current_user(request)
+    if not user:
+        return JSONResponse({"status": "error"}, status_code=401)
+
+    data = await request.json()
+    order_id = data.get("order_id")
+    type_ = data.get("type", "no_gch")
+    reason = (data.get("reason") or "").strip()
+
+    if not order_id:
+        return JSONResponse(
+            {"status": "error", "message": "Нет order_id"},
+            status_code=400
+        )
+    if len(reason) < 5:
+        return JSONResponse(
+            {"status": "error", "message": "Опишите причину подробнее (мин. 5 символов)"},
+            status_code=400
+        )
+
+    from app.database import create_permission_request
+    rid = create_permission_request(int(order_id), user["id"], type_, reason)
+    return JSONResponse({"status": "ok", "request_id": rid})
+
+
+@router.get("/api/permission-status")
+def api_permission_status(request: Request):
+    """Возвращает статус последнего запроса по заказу и типу."""
+    order_id = request.query_params.get("order_id")
+    type_ = request.query_params.get("type", "no_gch")
+
+    if not order_id:
+        return JSONResponse({"status": "error"}, status_code=400)
+
+    from app.database import get_active_permission
+    perm = get_active_permission(int(order_id), type_)
+    return JSONResponse({"status": "ok", "permission": perm})

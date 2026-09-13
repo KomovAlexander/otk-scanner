@@ -130,6 +130,14 @@
             <tbody>
                 <!-- 1. Визуальный осмотр -->
                 <tr><td class="sub-title" colspan="3">1. Общий визуальный осмотр</td></tr>
+
+                {% if gch and gch.get('gch_number') == 'БЕЗ ГЧ' %}
+                <tr>
+                    <td class="param-col">1.1 Проверка по ГЧ</td>
+                    <td class="value-col">Не проводилась</td>
+                    <td class="result-col"><span class="result-warn">Без ГЧ (согласовано)</span></td>
+                </tr>
+                {% else %}
                 <tr>
                     <td class="param-col">1.1 Соответствие габаритному чертежу</td>
                     <td class="value-col">{{ 'Да' if visual.get('gch_match') == 'yes' else 'Нет' if visual.get('gch_match') == 'no' else '—' }}</td>
@@ -168,6 +176,7 @@
                         {% if visual.get('mass') %}<span class="result-ok">Соотв.</span>{% else %}<span class="result-fail">—</span>{% endif %}
                     </td>
                 </tr>
+                {% endif %}
 
                 <!-- 2. Гидравлическая схема -->
                 <tr><td class="sub-title" colspan="3">2. Проверка гидравлической схемы</td></tr>

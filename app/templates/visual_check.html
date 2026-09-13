@@ -171,6 +171,7 @@
     </div>
 
     <!-- ═══════════ РАЗДЕЛ 1: ГЧ ═══════════ -->
+    {% if not gch_is_absent %}
     <div class="section-header" onclick="toggleSection('gchSection')">
         <h3>📐 Соответствие чертежу (ГЧ)</h3>
         <span class="toggle-icon rotated" id="gchIcon">▼</span>
@@ -218,7 +219,12 @@
             <input type="number" id="massInput" placeholder="Введите массу (кг)" step="0.1" min="0.1">
         </div>
     </div>
-
+    {% else %}
+    <div class="info-row" style="background:#3a2e1e; border-color:#ff9800; margin-bottom:20px;">
+        ⚠️ <strong>Проверка по ГЧ не проводится</strong> — документ отсутствует, согласовано с администратором.
+    </div>
+    {% endif %}
+    
     <!-- ═══════════ РАЗДЕЛ 2: Г3 ═══════════ -->
     <div class="section-header" onclick="toggleSection('g3Section')">
         <h3>⚙️ Проверка сборки (Г3)</h3>
@@ -368,6 +374,7 @@
     }
 
     function checkSize(input) {
+        if (!input || !input.dataset || !input.dataset.etalon) return;
         const etalon = input.dataset.etalon.replace(',', '.');
         const value = input.value.trim().replace(',', '.');
         const commentBox = input.parentElement.querySelector('.comment-box');
@@ -390,11 +397,12 @@
 
     function checkRAL() {
         const input = document.getElementById('ralInput');
+        if (!input) return;
         const etalon = input.dataset.etalon;
         const commentBox = document.getElementById('ralCommentBox');
         if (!etalon || !input.value.trim()) {
             input.classList.remove('match-ok', 'match-fail');
-            commentBox.style.display = 'none';
+            if (commentBox) commentBox.style.display = 'none';
             updateDeviations(); checkAllFields(); return;
         }
         if (input.value.trim() === etalon) {
@@ -719,23 +727,29 @@
         window.location.href = '/measurements?' + params.toString();
     }
 
-    document.getElementById('matchGCH').addEventListener('change', function() {
-        document.getElementById('gchCommentBox').style.display = this.value === 'no' ? 'block' : 'none';
-        if (this.value === 'no') { this.classList.add('match-fail'); this.classList.remove('match-ok'); }
-        else if (this.value === 'yes') { this.classList.add('match-ok'); this.classList.remove('match-fail'); }
-        else { this.classList.remove('match-ok', 'match-fail'); }
-        updateDeviations();
-        checkAllFields();
-        autoSave();
-    });
+    const gchSelInit = document.getElementById('matchGCH');
+    if (gchSelInit) {
+        gchSelInit.addEventListener('change', function() {
+            document.getElementById('gchCommentBox').style.display = this.value === 'no' ? 'block' : 'none';
+            if (this.value === 'no') { this.classList.add('match-fail'); this.classList.remove('match-ok'); }
+            else if (this.value === 'yes') { this.classList.add('match-ok'); this.classList.remove('match-fail'); }
+            else { this.classList.remove('match-ok', 'match-fail'); }
+            updateDeviations();
+            checkAllFields();
+            autoSave();
+        });
+    }
 
-    document.getElementById('massInput').addEventListener('input', function() {
-        if (this.value && parseFloat(this.value) <= 0) { this.value = ''; alert('⚠️ Масса должна быть больше 0!'); }
-        if (this.value && parseFloat(this.value) > 0) { this.classList.add('match-ok'); this.classList.remove('match-fail'); }
-        else { this.classList.remove('match-ok', 'match-fail'); }
-        checkAllFields();
-        autoSave();
-    });
+    const massInputInit = document.getElementById('massInput');
+    if (massInputInit) {
+        massInputInit.addEventListener('input', function() {
+            if (this.value && parseFloat(this.value) <= 0) { this.value = ''; alert('⚠️ Масса должна быть больше 0!'); }
+            if (this.value && parseFloat(this.value) > 0) { this.classList.add('match-ok'); this.classList.remove('match-fail'); }
+            else { this.classList.remove('match-ok', 'match-fail'); }
+            checkAllFields();
+            autoSave();
+        });
+    }
 
     document.querySelectorAll('.check-select').forEach(select => {
         select.addEventListener('change', function() {
@@ -764,9 +778,10 @@
             
             isRestoring = true;
             
-            if (saved.gch_match) {
-                document.getElementById('matchGCH').value = saved.gch_match;
-                document.getElementById('matchGCH').dispatchEvent(new Event('change'));
+            const gchSel = document.getElementById('matchGCH');
+            if (gchSel && saved.gch_match) {
+                gchSel.value = saved.gch_match;
+                gchSel.dispatchEvent(new Event('change'));
             }
             if (saved.sizes) {
                 document.querySelectorAll('.size-input').forEach((input, i) => {
@@ -776,13 +791,15 @@
                     }
                 });
             }
-            if (saved.ral) {
-                document.getElementById('ralInput').value = saved.ral;
-                document.getElementById('ralInput').dispatchEvent(new Event('input'));
+            const ralEl = document.getElementById('ralInput');
+            if (ralEl && saved.ral) {
+                ralEl.value = saved.ral;
+                ralEl.dispatchEvent(new Event('input'));
             }
-            if (saved.mass) {
-                document.getElementById('massInput').value = saved.mass;
-                document.getElementById('massInput').dispatchEvent(new Event('input'));
+            const massEl = document.getElementById('massInput');
+            if (massEl && saved.mass) {
+                massEl.value = saved.mass;
+                massEl.dispatchEvent(new Event('input'));
             }
             
             if (saved.g3_checks) {

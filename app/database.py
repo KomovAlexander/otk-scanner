@@ -129,6 +129,24 @@ def init_db():
         )
     """)
 
+    # Запросы разрешений (например, работать без ГЧ)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS permission_requests (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            order_id INTEGER NOT NULL,
+            user_id INTEGER NOT NULL,
+            type TEXT NOT NULL,
+            reason TEXT DEFAULT '',
+            status TEXT DEFAULT 'pending',
+            admin_id INTEGER,
+            admin_comment TEXT DEFAULT '',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            resolved_at TIMESTAMP,
+            FOREIGN KEY (order_id) REFERENCES orders(id),
+            FOREIGN KEY (user_id) REFERENCES users(id)
+        )
+    """)
+
     # Добавляем колонку user_id если её нет
     cursor.execute("PRAGMA table_info(orders)")
     columns = [row["name"] for row in cursor.fetchall()]
@@ -539,3 +557,99 @@ def delete_order(order_id: int):
     order_dir = os.path.join("app/static/uploads", f"order_{order_id}")
     if os.path.exists(order_dir):
         shutil.rmtree(order_dir)
+
+
+
+# ─── Функции для работы с запросами разрешений ───
+
+def create_permission_request(order_id: int, user_id: int, type_: str, reason: str) -> int:
+    """Создаёт запрос разрешения. Старые pending-запросы этого типа отменяет."""
+    conn = get_db()
+    cursor = conn.cursor()
+    # Отменяем старые незакрытые запросы этого типа — чтобы не было дублей
+    cursor.execute(
+        "UPDATE permission_requests SET status='cancelled' "
+        "WHERE order_id=? AND type=? AND status='pending'",
+        (order_id, type_)
+    )
+    cursor.execute(
+        "INSERT INTO permission_requests (order_id, user_id, type, reason) VALUES (?,?,?,?)",
+        (order_id, user_id, type_, reason)
+    )
+    conn.commit()
+    rid = cursor.lastrowid
+    conn.close()
+    return rid
+
+
+def get_active_permission(order_id: int, type_: str) -> dict | None:
+    """Возвращает последний запрос по заказу и типу (любого статуса)."""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT * FROM permission_requests WHERE order_id=? AND type=? "
+        "ORDER BY id DESC LIMIT 1",
+        (order_id, type_)
+    )
+    row = cursor.fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def get_pending_requests() -> list:
+    """Все активные запросы (для страницы админа)."""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT pr.*, o.order_number, o.product_name,
+               u.last_name, u.first_name, u.login
+        FROM permission_requests pr
+        JOIN orders o ON o.id = pr.order_id
+        JOIN users u ON u.id = pr.user_id
+        WHERE pr.status = 'pending'
+        ORDER BY pr.id DESC
+    """)
+    rows = [dict(r) for r in cursor.fetchall()]
+    conn.close()
+    return rows
+
+
+def get_all_requests(limit: int = 100) -> list:
+    """Все запросы включая закрытые (для истории в админке)."""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT pr.*, o.order_number, o.product_name,
+               u.last_name, u.first_name, u.login
+        FROM permission_requests pr
+        JOIN orders o ON o.id = pr.order_id
+        JOIN users u ON u.id = pr.user_id
+        ORDER BY pr.id DESC
+        LIMIT ?
+    """, (limit,))
+    rows = [dict(r) for r in cursor.fetchall()]
+    conn.close()
+    return rows
+
+
+def resolve_permission(request_id: int, admin_id: int, status_: str, comment: str):
+    """Админ разрешает или отклоняет запрос."""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "UPDATE permission_requests SET status=?, admin_id=?, admin_comment=?, "
+        "resolved_at=CURRENT_TIMESTAMP WHERE id=?",
+        (status_, admin_id, comment, request_id)
+    )
+    conn.commit()
+    conn.close()
+
+
+def count_pending_requests() -> int:
+    """Сколько запросов ждут ответа админа."""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT COUNT(*) FROM permission_requests WHERE status='pending'")
+    n = cursor.fetchone()[0]
+    conn.close()
+    return n        

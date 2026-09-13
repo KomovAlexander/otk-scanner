@@ -119,6 +119,12 @@
     <div class="admin-sidebar">
         <h2>Админка</h2>
         <a href="/admin">👥 Пользователи</a>
+        <a href="/admin/requests">
+            📩 Запросы
+            {% if pending_count and pending_count > 0 %}
+            <span style="background:#f44336; color:#fff; border-radius:10px; padding:2px 8px; font-size:11px; margin-left:6px;">{{ pending_count }}</span>
+            {% endif %}
+        </a>
         <a href="/">📷 Сканер</a>
         <a href="/logout" style="color:#f44336;">🚪 Выйти</a>
     </div>

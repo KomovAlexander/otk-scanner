@@ -54,23 +54,60 @@
         max-height: 300px;
         border-radius: 8px;
     }
+
+    /* Кнопка "ГЧ отсутствует" */
+    .btn-no-gch {
+        display: block;
+        width: 100%;
+        margin-top: 12px;
+        padding: 12px 20px;
+        background: #2a2020;
+        color: #ffaaaa;
+        border: 1px solid #f44336;
+        border-radius: 8px;
+        font-size: 14px;
+        cursor: pointer;
+    }
+    .btn-no-gch:hover {
+        background: #3a2020;
+        color: #ff6666;
+    }
+
+    /* Баннер статуса разрешения */
+    .perm-banner {
+        margin-top: 16px;
+        border-radius: 12px;
+        padding: 16px 18px;
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+        border: 1px solid;
+        font-size: 14px;
+        line-height: 1.5;
+    }
+    .perm-banner .perm-icon {
+        font-size: 22px;
+        flex-shrink: 0;
+        line-height: 1.2;
+    }
+    .perm-banner .perm-text strong { display: block; margin-bottom: 4px; }
+    .perm-banner .perm-sub { font-size: 13px; color: #aaa; margin-top: 4px; }
+
+    .perm-pending { background: #3a2e1e; border-color: #ff9800; }
+    .perm-pending strong { color: #ff9800; }
+
+    .perm-approved { background: #1e3a1e; border-color: #4caf50; }
+    .perm-approved strong { color: #4caf50; }
+
+    .perm-rejected { background: #3a2020; border-color: #f44336; }
+    .perm-rejected strong { color: #f44336; }
+
     @media (max-width: 480px) {
-        .size-row {
-            flex-wrap: wrap;
-        }
-        .size-row .etalon {
-            min-width: 100%;
-            margin-bottom: 4px;
-        }
-        .size-row input {
-            flex: 1;
-            min-width: 0;
-        }
-        .btn-remove {
-            padding: 10px 14px;
-            font-size: 16px;
-        }
-    }    
+        .size-row { flex-wrap: wrap; }
+        .size-row .etalon { min-width: 100%; margin-bottom: 4px; }
+        .size-row input { flex: 1; min-width: 0; }
+        .btn-remove { padding: 10px 14px; font-size: 16px; }
+    }
 </style>
 {% endblock %}
 
@@ -128,6 +165,13 @@
         <input type="file" id="galleryInput" accept="image/*,.pdf" hidden>
         <button class="btn-capture" id="captureBtn">📷 Сделать фото</button>
         <label for="galleryInput" class="btn-upload">📁 Загрузить из галереи</label>
+
+        {# Кнопку "ГЧ отсутствует" показываем только если заказ создан и нет одобрения/ожидания #}
+        {% if order_id and not (permission and permission.status in ['approved', 'pending']) %}
+        <button type="button" class="btn-no-gch" onclick="openNoGchDialog()">
+            🚫 ГЧ отсутствует — запросить разрешение
+        </button>
+        {% endif %}
     </div>
 
     <!-- Скрытая анимация и карточка результата -->
@@ -158,16 +202,50 @@
     </div>
     {% endif %}
 
+    <!-- Баннер статуса запроса разрешения -->
+    {% if permission %}
+        {% if permission.status == 'pending' %}
+        <div class="perm-banner perm-pending">
+            <span class="perm-icon">⏳</span>
+            <div class="perm-text">
+                <strong>Запрос отправлен</strong>
+                Ожидайте ответа администратора.
+                <div class="perm-sub">Причина: {{ permission.reason }}</div>
+            </div>
+        </div>
+        {% elif permission.status == 'approved' %}
+        <div class="perm-banner perm-approved">
+            <span class="perm-icon">✅</span>
+            <div class="perm-text">
+                <strong>Разрешено работать без ГЧ</strong>
+                {% if permission.admin_comment %}
+                <div class="perm-sub">Комментарий: {{ permission.admin_comment }}</div>
+                {% endif %}
+            </div>
+        </div>
+        {% elif permission.status == 'rejected' %}
+        <div class="perm-banner perm-rejected">
+            <span class="perm-icon">❌</span>
+            <div class="perm-text">
+                <strong>Отказано</strong>
+                {{ permission.admin_comment or 'Причина не указана' }}
+            </div>
+        </div>
+        {% endif %}
+    {% endif %}
+
     <div class="scanning-animation" id="scanAnimation" style="display: none; text-align: center; padding: 20px;">
         <div class="scan-line"></div>
         <p>Идет распознавание…</p>
     </div>
 
-        {% if gch_data %}
-        <button class="btn-next" id="btnNext" onclick="goNext()">Далее →</button>
-        {% else %}
-        <button class="btn-next" id="btnNext" onclick="goNext()" style="display: none;">Далее →</button>
-        {% endif %}
+    {% if gch_data %}
+    <button class="btn-next" id="btnNext" onclick="goNext()">Далее →</button>
+    {% elif permission and permission.status == 'approved' %}
+    <button class="btn-next" id="btnNext" onclick="goNextApproved()">Далее →</button>
+    {% else %}
+    <button class="btn-next" id="btnNext" onclick="goNext()" style="display: none;">Далее →</button>
+    {% endif %}
 </div>
 {% endblock %}
 
@@ -175,7 +253,8 @@
 <script>
     let currentNumbers = {{ gch_sizes | tojson }};
     let hasData = {{ 'true' if gch_data else 'false' }};
-    
+    let permStatus = {{ permission.status | tojson if permission else 'null' }};
+
     // Показываем размеры при загрузке
     renderNumbers();
 
@@ -184,10 +263,12 @@
     const dataCard = document.getElementById('dataCard');
     const scanAnimation = document.getElementById('scanAnimation');
     const btnNext = document.getElementById('btnNext');
+
     // Если данные уже есть — разблокируем кнопку
     if (hasData) {
         btnNext.disabled = false;
     }
+
     {% if not gch_data %}
     // Режим 1: активируем камеру
     const captureBtn = document.getElementById('captureBtn');
@@ -197,6 +278,7 @@
     {% endif %}
 
     [cameraInput, galleryInput].forEach(input => {
+        if (!input) return;
         input.addEventListener('change', () => {
             const file = input.files[0];
             if (!file) return;
@@ -214,7 +296,7 @@
             reader.readAsDataURL(file);
 
             if (dataCard) dataCard.style.display = 'none';
-            scanAnimation.style.display = 'block';
+            if (scanAnimation) scanAnimation.style.display = 'block';
 
             const formData = new FormData();
             formData.append('file', file);
@@ -229,10 +311,10 @@
                     console.log('Ответ сервера:', data);
                     if (data.status === 'error') {
                         alert(data.message);
-                        scanAnimation.style.display = 'none';
+                        if (scanAnimation) scanAnimation.style.display = 'none';
                         return;
                     }
-                    
+
                     if (data.status === 'warning') {
                         console.log('Warning:', data.message);
                         const userConfirmed = confirm(
@@ -240,20 +322,20 @@
                             'Нажмите "OK" — если это правильный документ (OCR ошибся).\n' +
                             'Нажмите "Отмена" — если это не тот документ.'
                         );
-                        
+
                         if (!userConfirmed) {
-                            scanAnimation.style.display = 'none';
+                            if (scanAnimation) scanAnimation.style.display = 'none';
                             alert('Документ отклонён. Сфотографируйте правильный документ.');
                             return;
                         }
                     }
-                    
-                    scanAnimation.style.display = 'none';
+
+                    if (scanAnimation) scanAnimation.style.display = 'none';
                     if (dataCard) dataCard.style.display = 'block';
                     btnNext.disabled = false;
                     btnNext.style.display = 'block';
                     hasData = true;
-                    
+
                     document.getElementById('gchNumber').value = data.gch_number || 'НЕ НАЙДЕНО';
                     document.getElementById('gchProduct').value = data.found_product || 'НЕ НАЙДЕНО';
                     document.getElementById('gchRal').value = data.ral || '';
@@ -308,6 +390,94 @@
         params.set('gch_sizes', currentNumbers.join(','));
         params.set('gch_ral', document.getElementById('gchRal').value);
         window.location.href = '/check-g3?' + params.toString();
+    }
+
+    async function goNextApproved() {
+        // Отмечаем шаг "gch" как пройденный и переходим на Г3
+        const params = new URLSearchParams(window.location.search);
+        const orderId = params.get('order_id');
+        if (!orderId) {
+            window.location.href = '/';
+            return;
+        }
+
+        try {
+            // Сохраним пустую запись gch_data с меткой "БЕЗ ГЧ"
+            await fetch('/api/save-gch', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    order_id: parseInt(orderId),
+                    gch_number: 'БЕЗ ГЧ',
+                    ral: '',
+                    sizes: []
+                })
+            });
+        } catch (e) {
+            console.error('Ошибка сохранения:', e);
+        }
+
+        window.location.href = '/check-g3?' + params.toString();
+    }
+
+    // ── Запрос разрешения работать без ГЧ ──
+    async function openNoGchDialog() {
+        const params = new URLSearchParams(window.location.search);
+        const orderId = params.get('order_id');
+        if (!orderId) {
+            showInfoModal('Сначала создайте заказ (отсканируйте задание на производство).', 'Внимание');
+            return;
+        }
+
+        // Проверим актуальный статус на сервере
+        try {
+            const r = await fetch('/api/permission-status?order_id=' + orderId + '&type=no_gch');
+            const d = await r.json();
+            const perm = d.permission;
+
+            if (perm && perm.status === 'pending') {
+                showInfoModal('Запрос уже отправлен. Ожидайте ответа администратора.', '⏳ В ожидании');
+                return;
+            }
+            if (perm && perm.status === 'approved') {
+                showInfoModal('Уже разрешено работать без ГЧ.', '✅ Разрешено');
+                return;
+            }
+        } catch (e) {
+            // если не получилось — всё равно дадим отправить
+        }
+
+        showPromptModal(
+            'Почему нет ГЧ?',
+            'Например: чертёж не передан конструктором',
+            async function(reason) {
+                if (!reason || reason.trim().length < 5) {
+                    showInfoModal('Опишите причину подробнее (минимум 5 символов).', 'Внимание');
+                    return;
+                }
+                try {
+                    const r = await fetch('/api/request-permission', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            order_id: parseInt(orderId),
+                            type: 'no_gch',
+                            reason: reason.trim()
+                        })
+                    });
+                    const d = await r.json();
+                    if (d.status === 'ok') {
+                        closeUniversalModal();
+                        showInfoModal('Запрос отправлен администратору. Ожидайте ответа.\n\nОбновите страницу позже, чтобы увидеть статус.', '⏳ Отправлено');
+                        setTimeout(function() { location.reload(); }, 3000);
+                    } else {
+                        showInfoModal(d.message || 'Ошибка отправки', 'Ошибка');
+                    }
+                } catch (e) {
+                    showInfoModal('Ошибка сети: ' + e, 'Ошибка');
+                }
+            }
+        );
     }
 </script>
 {% endblock %}

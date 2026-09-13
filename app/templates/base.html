@@ -314,7 +314,14 @@
         </div>
         <img id="lightbox-img" src="" style="max-width: 95%; max-height: 85%; object-fit: contain; transition: transform 0.3s; cursor: default;">
     </div>
-
+    <!-- Универсальная модалка -->
+    <div id="universalModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.75); z-index:10000; justify-content:center; align-items:center; padding:16px;">
+        <div style="background:#1e2128; border-radius:16px; padding:24px; max-width:480px; width:100%; max-height:90vh; overflow-y:auto;">
+            <h3 id="universalModalTitle" style="margin-bottom:12px; color:#ff6b35; font-size:18px;"></h3>
+            <div id="universalModalBody" style="font-size:15px; line-height:1.5; white-space:pre-line; margin-bottom:20px; color:#e0e0e0;"></div>
+            <div id="universalModalButtons" style="display:flex; gap:10px;"></div>
+        </div>
+    </div>
     <script>
         let lightboxRotation = 0;
         let currentImageSrc = '';
@@ -393,6 +400,83 @@
                 openLightbox(e.target.src);
             }
         });
+        // ── Универсальная модалка ──
+        function showInfoModal(text, title) {
+            title = title || 'Информация';
+            const m = document.getElementById('universalModal');
+            document.getElementById('universalModalTitle').textContent = title;
+            document.getElementById('universalModalBody').textContent = text;
+            document.getElementById('universalModalButtons').innerHTML =
+                '<button class="btn-primary" style="flex:1;" onclick="closeUniversalModal()">OK</button>';
+            m.style.display = 'flex';
+        }
+
+        function showConfirmModal(text, onYes, onNo) {
+            const m = document.getElementById('universalModal');
+            document.getElementById('universalModalTitle').textContent = 'Подтверждение';
+            document.getElementById('universalModalBody').textContent = text;
+            const btnBox = document.getElementById('universalModalButtons');
+            btnBox.innerHTML = '';
+
+            const yes = document.createElement('button');
+            yes.className = 'btn-primary';
+            yes.style.flex = '1';
+            yes.textContent = 'Да';
+            yes.onclick = function() {
+                closeUniversalModal();
+                if (onYes) onYes();
+            };
+
+            const no = document.createElement('button');
+            no.className = 'btn-secondary';
+            no.style.flex = '1';
+            no.textContent = 'Отмена';
+            no.onclick = function() {
+                closeUniversalModal();
+                if (onNo) onNo();
+            };
+
+            btnBox.appendChild(yes);
+            btnBox.appendChild(no);
+            m.style.display = 'flex';
+        }
+
+        function showPromptModal(title, placeholder, onOk) {
+            const m = document.getElementById('universalModal');
+            document.getElementById('universalModalTitle').textContent = title;
+            document.getElementById('universalModalBody').innerHTML =
+                '<textarea id="universalModalInput" placeholder="' + (placeholder || '') + '" ' +
+                'style="width:100%; padding:12px; background:#2a2d35; border:1px solid #3a3d45; ' +
+                'border-radius:8px; color:#fff; font-size:15px; min-height:90px; resize:vertical;"></textarea>';
+            const btnBox = document.getElementById('universalModalButtons');
+            btnBox.innerHTML = '';
+
+            const ok = document.createElement('button');
+            ok.className = 'btn-primary';
+            ok.style.flex = '1';
+            ok.textContent = 'Отправить';
+            ok.onclick = function() {
+                const val = document.getElementById('universalModalInput').value.trim();
+                if (onOk) onOk(val);
+            };
+
+            const cancel = document.createElement('button');
+            cancel.className = 'btn-secondary';
+            cancel.style.flex = '1';
+            cancel.textContent = 'Отмена';
+            cancel.onclick = closeUniversalModal;
+
+            btnBox.appendChild(ok);
+            btnBox.appendChild(cancel);
+            m.style.display = 'flex';
+            setTimeout(function() {
+                document.getElementById('universalModalInput').focus();
+            }, 50);
+        }
+
+        function closeUniversalModal() {
+            document.getElementById('universalModal').style.display = 'none';
+        }        
     </script>
     {% block extra_js %}{% endblock %}
 </body>
