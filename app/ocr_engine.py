@@ -3,11 +3,7 @@
 import re
 import os
 import base64
-import json
 import requests
-import cv2
-import numpy as np
-from datetime import datetime
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -16,99 +12,8 @@ API_KEY = os.getenv("YANDEX_API_KEY")
 FOLDER_ID = os.getenv("YANDEX_FOLDER_ID")
 
 
-def perspective_correction(image_path):
-    """
-    Выравнивает изображение: находит границы листа и поворачивает его.
-    Не обрезает — расширяет холст перед поворотом.
-    """
-    img = cv2.imread(image_path)
-    if img is None:
-        print("⚠️ Не удалось загрузить изображение для выравнивания")
-        return image_path
-
-    # Создаём папку для отладки
-    debug_dir = os.path.join(os.path.dirname(image_path), "debug")
-    os.makedirs(debug_dir, exist_ok=True)
-
-    # Сохраняем оригинал
-    timestamp = datetime.now().strftime("%H%M%S")
-    original_path = os.path.join(debug_dir, f"original_{timestamp}.jpg")
-    cv2.imwrite(original_path, img)
-    print(f"📷 Оригинал сохранён: {original_path}")
-
-    h, w = img.shape[:2]
-
-    # Переводим в серый
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    blur = cv2.GaussianBlur(gray, (5, 5), 0)
-
-    # Ищем края
-    edges = cv2.Canny(blur, 50, 150)
-
-    # Ищем контуры
-    contours, _ = cv2.findContours(
-        edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
-    if not contours:
-        print("⚠️ Контуры не найдены")
-        return image_path
-
-    # Ищем самый большой контур (весь лист)
-    largest = max(contours, key=cv2.contourArea)
-
-    # Находим минимальный прямоугольник, охватывающий контур
-    rect = cv2.minAreaRect(largest)
-    angle = rect[2]
-
-    # Корректируем угол
-    if angle < -45:
-        angle += 90
-
-    # Расширяем холст чтобы при повороте не обрезалось
-    diagonal = int(np.sqrt(h**2 + w**2))
-    expanded = np.ones((diagonal, diagonal, 3), dtype=np.uint8) * 255
-
-    # Вставляем оригинал в центр расширенного холста
-    y_offset = (diagonal - h) // 2
-    x_offset = (diagonal - w) // 2
-    expanded[y_offset:y_offset+h, x_offset:x_offset+w] = img
-
-    # Поворачиваем расширенное изображение
-    center = (diagonal // 2, diagonal // 2)
-    M = cv2.getRotationMatrix2D(center, angle, 1.0)
-    rotated = cv2.warpAffine(expanded, M, (diagonal, diagonal),
-                             borderMode=cv2.BORDER_CONSTANT, borderValue=(255, 255, 255))
-
-    # Обрезаем белые края после поворота
-    gray_rotated = cv2.cvtColor(rotated, cv2.COLOR_BGR2GRAY)
-    _, thresh = cv2.threshold(gray_rotated, 250, 255, cv2.THRESH_BINARY_INV)
-    coords = cv2.findNonZero(thresh)
-    if coords is not None:
-        x, y, cw, ch = cv2.boundingRect(coords)
-        # Добавляем небольшой отступ
-        pad = 20
-        x = max(0, x - pad)
-        y = max(0, y - pad)
-        cw = min(rotated.shape[1] - x, cw + pad*2)
-        ch = min(rotated.shape[0] - y, ch + pad*2)
-        rotated = rotated[y:y+ch, x:x+cw]
-
-    # Сохраняем результат
-    corrected_path = os.path.join(debug_dir, f"corrected_{timestamp}.jpg")
-    cv2.imwrite(corrected_path, rotated)
-    print(f"📐 Исправлено сохранено: {corrected_path}")
-    print(f"📐 Поворот на {angle:.1f}°")
-
-    # Сохраняем поверх исходного
-    cv2.imwrite(image_path, rotated)
-
-    return image_path
-
-
 def scan_document(image_path: str) -> dict:
     """Распознавание производственного бланка через Yandex Vision API."""
-    # Автовыравнивание перспективы перед распознаванием
-    # perspective_correction(image_path)
 
     print(f"Файл: {image_path}")
     print(f"Размер: {os.path.getsize(image_path)} байт")
@@ -158,7 +63,6 @@ def scan_document(image_path: str) -> dict:
     except (KeyError, IndexError) as e:
         print(f"ОШИБКА ПАРСИНГА: {e}")
         recognized_text = ""
-    # ВЫВОД РАСПОЗНАННОГО ТЕКСТА
     print("=" * 60)
     print("РАСПОЗНАНО:")
     print(recognized_text if recognized_text else "ПУСТО")
@@ -195,7 +99,8 @@ def scan_document(image_path: str) -> dict:
     # 3. Изделие
     product_name = extract_product_name(recognized_text)
 
-    print(f"\n>>> РЕЗУЛЬТАТ: заказ={order_number}, отдел={department}, изделие={product_name}")
+    print(
+        f"\n>>> РЕЗУЛЬТАТ: заказ={order_number}, отдел={department}, изделие={product_name}")
 
     return {
         "order_number": order_number,

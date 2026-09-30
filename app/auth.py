@@ -49,5 +49,6 @@ def require_admin(request: Request) -> dict:
     """Проверяет что пользователь — админ."""
     user = require_auth(request)
     if user["role"] != "admin":
-        raise HTTPException(status_code=403, detail="Требуются права администратора")
+        raise HTTPException(
+            status_code=403, detail="Требуются права администратора")
     return user

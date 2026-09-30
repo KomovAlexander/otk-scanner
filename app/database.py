@@ -158,7 +158,6 @@ def init_db():
 
 
 # ─── Функции для работы с прогрессом заказа ───
-
 def init_order_progress(order_id: int):
     """Создаёт запись о прогрессе для заказа, если её ещё нет."""
     conn = get_db()
@@ -227,7 +226,6 @@ def mark_step_completed(order_id: int, step: str, next_step: str):
 
 
 # ─── Функции для работы со страницами ПГ3 ───
-
 def get_pg3_pages(order_id: int) -> list:
     """Возвращает список страниц ПГ3."""
     conn = get_db()
@@ -303,7 +301,6 @@ def clear_visual_pg3_for_order(order_id: int):
 
 
 # ─── Функции для работы с заказами ───
-
 def get_or_create_order(order_number: str, product_name: str, department: str, user_id: int = None) -> int:
     conn = get_db()
     cursor = conn.cursor()
@@ -561,12 +558,10 @@ def delete_order(order_id: int):
 
 
 # ─── Функции для работы с запросами разрешений ───
-
 def create_permission_request(order_id: int, user_id: int, type_: str, reason: str) -> int:
     """Создаёт запрос разрешения. Старые pending-запросы этого типа отменяет."""
     conn = get_db()
     cursor = conn.cursor()
-    # Отменяем старые незакрытые запросы этого типа — чтобы не было дублей
     cursor.execute(
         "UPDATE permission_requests SET status='cancelled' "
         "WHERE order_id=? AND type=? AND status='pending'",

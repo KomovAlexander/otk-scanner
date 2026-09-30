@@ -63,7 +63,7 @@ def extract_product_name(text: str) -> str:
         candidate = re.sub(r'\.\d{3,4}\.\d{3,4}.*$', '', candidate)
         if candidate:
             return candidate.strip()
-    
+
     # Запасной: ищем по паттернам изделий
     for pattern in PRODUCT_PATTERNS:
         match = re.search(pattern, text, re.IGNORECASE)
@@ -72,13 +72,13 @@ def extract_product_name(text: str) -> str:
             # Отрезаем ".000.000" если есть
             result = re.sub(r'\.\d{3,4}\.\d{3,4}.*$', '', result)
             return result
-    
+
     return "НЕ НАЙДЕНО"
 
 
 def detect_document_type(text: str) -> dict:
     """Определяет тип документа по распознанному тексту."""
-    
+
     # 1. Ищем тип по словам
     if re.search(r'Сборочный\s+чертёж', text, re.IGNORECASE):
         doc_type = "ГЧ"
@@ -90,14 +90,14 @@ def detect_document_type(text: str) -> dict:
         doc_type = "Г3"
     else:
         doc_type = None  # ← None вместо "неизвестный"
-    
+
     # 2. Ищем номер документа с суффиксом
     any_doc_match = re.search(ANY_DOC_PATTERN, text, re.IGNORECASE)
-    
+
     if any_doc_match:
         doc_full = any_doc_match.group(0).strip()
         doc_number = any_doc_match.group(1).strip()
-        
+
         # Определяем тип по суффиксу
         if re.search(r'ПГ[3З]', doc_full, re.IGNORECASE):
             suffix_type = "ПГ3"
@@ -107,21 +107,21 @@ def detect_document_type(text: str) -> dict:
             suffix_type = "Г3"
         else:
             suffix_type = None
-        
+
         # Если тип по словам не найден, но суффикс есть
         if doc_type is None and suffix_type:
             doc_type = suffix_type
-        
+
         return {"type": doc_type, "number": doc_number}
-    
+
     # 3. Ищем номер без суффикса
     doc_match = re.search(
         r'([A-ZА-Я]+(?:[.\-]?[A-ZА-Я0-9]+)*[.\-\s]?\d{3,4}[.\-\s]\d{3,4}(?:[.\-\s]\d{1,3})?)',
         text, re.IGNORECASE
     )
-    
+
     if doc_match:
         doc_number = doc_match.group(1).strip()
         return {"type": doc_type, "number": doc_number}
-    
+
     return {"type": doc_type, "number": "НЕ НАЙДЕНО"}

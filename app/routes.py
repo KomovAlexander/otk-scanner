@@ -6,23 +6,19 @@ import shutil
 import uuid
 
 import pymupdf
-from fastapi import APIRouter, File, Form, Request, UploadFile
+from fastapi import APIRouter, File, Request, UploadFile
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
-from app.auth import authenticate, get_current_user, require_auth
-from app.database import (clear_visual_pg3_for_order, delete_pg3_page,
-                          get_all_orders, get_all_pg3_items, get_db,
+from app.auth import authenticate, get_current_user
+from app.database import (get_all_orders, get_all_pg3_items, get_db,
                           get_measurement_results, get_order_photos,
                           get_order_progress, get_pg3_pages,
                           get_visual_results, is_order_completed,
-                          mark_step_completed, save_g3, save_gch,
-                          save_measurement_results, save_pg3_page,
-                          save_visual_results, update_order_step)
+                          mark_step_completed, save_pg3_page,
+                          update_order_step)
 from app.ocr_engine import scan_document
-from app.patterns import (detect_document_type, extract_g3_number,
-                          extract_gch_number, extract_pg3_number,
-                          extract_product_name)
+
 
 router = APIRouter()
 templates = Jinja2Templates(directory="app/templates")
@@ -178,7 +174,7 @@ def check_document_match(order_id: str, found_product: str, doc_number: str) -> 
         if fp == op or fp in op or op in fp:
             product_exact = True
         elif levenshtein_distance(op, fp) <= 2:
-            product_close = True  # Похоже, но не точно
+            product_close = True
 
     # Проверяем номер документа
     doc_found = False
@@ -198,7 +194,6 @@ def check_document_match(order_id: str, found_product: str, doc_number: str) -> 
         elif levenshtein_distance(doc_code, product_code) <= 2:
             doc_close = True
 
-    # Итог
     if (product_exact or product_close) and (doc_exact or doc_close):
         if product_exact and doc_exact:
             return None  # ✅ Точное совпадение
@@ -301,9 +296,8 @@ def get_current_step(order_id: int) -> str:
     progress = get_order_progress(int(order_id))
     return progress["current_step"]
 
+
 # ── Поворот фото ──────────────────────────────
-
-
 @router.post("/api/rotate-photo")
 async def api_rotate_photo(request: Request):
     data = await request.json()
@@ -348,7 +342,7 @@ async def api_rotate_photo(request: Request):
     # Нормализуем угол
     rotation = rotation % 360
     if rotation == 0:
-        rotation = 360  # полный оборот — не поворачиваем
+        rotation = 360
     elif rotation == 90 or rotation == -270:
         img = cv2.rotate(img, cv2.ROTATE_90_CLOCKWISE)
     elif rotation == 180 or rotation == -180:
@@ -360,9 +354,9 @@ async def api_rotate_photo(request: Request):
     cv2.imwrite(file_path, img)
 
     return JSONResponse(content={"status": "ok", "new_url": image_path})
+
+
 # ── Личный кабинет ───────────────────────────────
-
-
 @router.get("/dashboard")
 def dashboard_page(request: Request):
     user = get_current_user(request)
@@ -388,8 +382,6 @@ def dashboard_page(request: Request):
 
 
 # ── Главная страница = сразу сканирование ──────────
-
-
 @router.get("/")
 def scan_page(request: Request):
     user = get_current_user(request)
@@ -414,7 +406,6 @@ def scan_page(request: Request):
 
         conn.close()
 
-        # Получаем прогресс из новой таблицы
         progress = get_order_progress(int(order_id))
         completed_steps = progress["completed_steps"]
         current_step = progress["current_step"]
@@ -641,11 +632,11 @@ async def api_scan_gch(request: Request, file: UploadFile = File(...)):
         order_dir = f"app/static/uploads/order_{order_id}"
         os.makedirs(order_dir, exist_ok=True)
         dest_path = f"{order_dir}/gch.jpeg"
-        
+
         # Удаляем старый файл если есть
         if os.path.exists(dest_path):
             os.remove(dest_path)
-        
+
         with open(file_path, "rb") as src, open(dest_path, "wb") as dst:
             shutil.copyfileobj(src, dst)
 
@@ -768,11 +759,11 @@ async def api_scan_g3(request: Request, file: UploadFile = File(...)):
         order_dir = f"app/static/uploads/order_{order_id}"
         os.makedirs(order_dir, exist_ok=True)
         dest_path = f"{order_dir}/g3.jpeg"
-        
+
         # Удаляем старый файл если есть
         if os.path.exists(dest_path):
             os.remove(dest_path)
-        
+
         with open(file_path, "rb") as src, open(dest_path, "wb") as dst:
             shutil.copyfileobj(src, dst)
 
@@ -785,6 +776,8 @@ async def api_scan_g3(request: Request, file: UploadFile = File(...)):
         "count": len(params),
         "preview_url": f"/uploads/{os.path.basename(file_path)}",
     })
+
+
 # ── Эндпоинт ручного сохранения Г3 ─────────────────
 @router.post("/api/save-g3")
 async def api_save_g3(request: Request):
@@ -792,12 +785,13 @@ async def api_save_g3(request: Request):
     order_id = data.get("order_id")
     if order_id:
         from app.database import save_g3, mark_step_completed, get_order_progress
-        save_g3(int(order_id), data.get("g3_number", ""), data.get("params", []))
-        
+        save_g3(int(order_id), data.get(
+            "g3_number", ""), data.get("params", []))
+
         progress = get_order_progress(int(order_id))
         if "g3" not in progress["completed_steps"]:
             mark_step_completed(int(order_id), "g3", "pg3")
-        
+
         return JSONResponse(content={"status": "ok"})
     return JSONResponse(content={"status": "error", "message": "Нет order_id"}, status_code=400)
 
@@ -832,7 +826,7 @@ def check_pg3_page(request: Request):
 
         # Получаем страницы ПГ3
         pages = get_pg3_pages(int(order_id))
-        
+
         # Если страниц нет — создаём первую пустую
         if not pages:
             save_pg3_page(int(order_id), 1, "", [])
@@ -890,17 +884,17 @@ async def api_scan_pg3(request: Request, file: UploadFile = File(...)):
     if order_id_str:
         from app.database import clear_visual_pg3_for_order, save_pg3_page
         order_id = int(order_id_str)
-        
+
         # Сохраняем страницу
         save_pg3_page(order_id, page_number, pg3_number, items)
-        
+
         # Сбрасываем визуальный контроль
         clear_visual_pg3_for_order(order_id)
 
         order_dir = f"app/static/uploads/order_{order_id}"
         os.makedirs(order_dir, exist_ok=True)
         dest_path = f"{order_dir}/pg3_page_{page_number}.jpeg"
-        
+
         # Просто перезаписываем
         with open(file_path, "rb") as src, open(dest_path, "wb") as dst:
             shutil.copyfileobj(src, dst)
@@ -923,18 +917,18 @@ async def api_save_pg3(request: Request):
     data = await request.json()
     order_id = data.get("order_id")
     page_number = data.get("page_number", 1)
-    
+
     if order_id:
         from app.database import (get_order_progress, mark_step_completed,
                                   save_pg3_page)
-        
+
         save_pg3_page(
             int(order_id),
             page_number,
             data.get("pg3_number", ""),
             data.get("items", [])
         )
-        
+
         progress = get_order_progress(int(order_id))
         if "pg3" not in progress["completed_steps"]:
             mark_step_completed(int(order_id), "pg3", "visual")
@@ -1073,6 +1067,7 @@ def visual_check_page(request: Request):
         "user": user,
     })
 
+
 # ── Страница измерений ────────────────────────────
 @router.get("/measurements")
 def measurements_page(request: Request):
@@ -1116,9 +1111,9 @@ def measurements_page(request: Request):
         "g3_params": json.loads(g3_data.get("params", "[]")) if g3_data else [],
         "user": user,
     })
+
+
 # ── Загрузка визуального контроля ──────────────────
-
-
 @router.get("/api/get-visual")
 def api_get_visual(request: Request):
     order_id = request.query_params.get("order_id", None)
@@ -1139,9 +1134,8 @@ def api_get_measurements(request: Request):
         return JSONResponse(content={"status": "ok", "data": data})
     return JSONResponse(content={"status": "error", "message": "Нет order_id"}, status_code=400)
 
+
 # ── Страница фотографирования ─────────────────────
-
-
 @router.get("/photo")
 def photo_page(request: Request):
     user = get_current_user(request)
@@ -1177,8 +1171,6 @@ def photo_page(request: Request):
             update_order_step(int(order_id), "protocol", completed_steps)
             current_step = "protocol"
         else:
-            # Фото ещё не загружены — фото текущий шаг
-            # Протокол должен быть в completed_steps (если он был пройден)
             if "protocol" not in completed_steps and "measurements" in completed_steps:
                 completed_steps.append("protocol")
             update_order_step(int(order_id), "photo", completed_steps)
@@ -1324,7 +1316,8 @@ def protocol_page(request: Request):
                             matching.get('tolerance', ''), etalon)
                         m_val['lower_tol'] = lower_tol
                         m_val['upper_tol'] = upper_tol
-                        m_val['tolerance_display'] = matching.get('tolerance', '')
+                        m_val['tolerance_display'] = matching.get(
+                            'tolerance', '')
                     except (ValueError, TypeError):
                         m_val['lower_tol'] = 0
                         m_val['upper_tol'] = 0
@@ -1394,9 +1387,8 @@ def logout(request: Request):
     request.session.clear()
     return RedirectResponse("/login", status_code=303)
 
+
 # ── Вспомогательные функции ─────────────────────
-
-
 def levenshtein_distance(s1: str, s2: str) -> int:
     """Вычисляет расстояние Левенштейна между двумя строками."""
     if len(s1) < len(s2):
@@ -1417,9 +1409,8 @@ def levenshtein_distance(s1: str, s2: str) -> int:
 
     return previous_row[-1]
 
+
 # ── Удаление заказа (только админ) ────────────────
-
-
 @router.get("/admin/orders/delete/{order_id}")
 def delete_order_route(request: Request, order_id: int):
     user = get_current_user(request)
@@ -1431,9 +1422,8 @@ def delete_order_route(request: Request, order_id: int):
 
     return RedirectResponse("/dashboard", status_code=303)
 
+
 # ── Страница шильдика ─────────────────────────────
-
-
 @router.get("/shildik")
 def shildik_page(request: Request):
     user = get_current_user(request)
@@ -1527,23 +1517,24 @@ def shildik_svg(request: Request):
 def presentation_page(request: Request):
     return templates.TemplateResponse("presentation.html", {"request": request})
 
+
 @router.get("/api/delete-pg3-page")
 def api_delete_pg3_page(request: Request):
     user = get_current_user(request)
     if not user:
         return RedirectResponse("/login", status_code=303)
-    
+
     page_id = request.query_params.get("page_id", None)
     order_id = request.query_params.get("order_id", None)
-    
+
     if not page_id or not order_id:
         return RedirectResponse(f"/check-pg3?order_id={order_id}", status_code=303)
-    
+
     from app.database import delete_pg3_page, get_pg3_pages, save_pg3_page
     import json
-    
+
     delete_pg3_page(int(page_id))
-    
+
     pages = get_pg3_pages(int(order_id))
     for index, page in enumerate(pages, start=1):
         if page["page_number"] != index:
@@ -1554,13 +1545,11 @@ def api_delete_pg3_page(request: Request):
                 json.loads(page["items"]) if page["items"] else []
             )
             delete_pg3_page(page["id"])
-    
+
     return RedirectResponse(f"/check-pg3?order_id={order_id}&page=1", status_code=303)
 
 
-
 # ── Запросы разрешений ─────────────────────────────
-
 @router.post("/api/request-permission")
 async def api_request_permission(request: Request):
     """Испытатель просит разрешение (например, работать без ГЧ)."""
@@ -1580,7 +1569,8 @@ async def api_request_permission(request: Request):
         )
     if len(reason) < 5:
         return JSONResponse(
-            {"status": "error", "message": "Опишите причину подробнее (мин. 5 символов)"},
+            {"status": "error",
+                "message": "Опишите причину подробнее (мин. 5 символов)"},
             status_code=400
         )
 

@@ -6,7 +6,6 @@ import base64
 import requests
 import os
 import re
-import json
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -20,7 +19,7 @@ def boost_colors(image_path):
     img = cv2.imread(image_path)
     if img is None:
         return image_path
-    
+
     hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
     hsv[:, :, 1] = np.clip(hsv[:, :, 1] * 1.2, 0, 255).astype(np.uint8)
     img = cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR)
@@ -73,20 +72,7 @@ def get_background_color(img, vertices, offset=3):
 
 
 def extract_all_colored_numbers(image_path: str) -> list:
-    # Усиливаем цвета перед распознаванием
-    # Усиливаем цвета
     boost_colors(image_path)
-    
-    # Загружаем усиленное изображение
-    img = cv2.imread(image_path)
-    # Сохраняем обработанное изображение для отладки
-    debug_dir = os.path.join(os.path.dirname(image_path), "debug_gch")
-    os.makedirs(debug_dir, exist_ok=True)
-    from datetime import datetime
-    timestamp = datetime.now().strftime("%H%M%S")
-    debug_path = os.path.join(debug_dir, f"boosted_{timestamp}.jpg")
-    cv2.imwrite(debug_path, img)
-    print(f"📷 Обработанное фото сохранено: {debug_path}")
     img = cv2.imread(image_path)
     if img is None:
         print("Ошибка загрузки изображения")
@@ -127,11 +113,13 @@ def extract_all_colored_numbers(image_path: str) -> list:
                     for word in line.get("words", []):
                         text = word["text"]
                         bbox = word["boundingBox"]["vertices"]
-                        bg_r, bg_g, bg_b = get_background_color(img, bbox, offset=5)
+                        bg_r, bg_g, bg_b = get_background_color(
+                            img, bbox, offset=5)
 
                         if is_green_pixel(bg_r, bg_g, bg_b, threshold=30):
                             colored_texts.append(text)
-                            print(f"  🟢 '{text}' — R={bg_r}, G={bg_g}, B={bg_b}")
+                            print(
+                                f"  🟢 '{text}' — R={bg_r}, G={bg_g}, B={bg_b}")
     except (KeyError, IndexError, TypeError) as e:
         print(f"Ошибка: {e}")
         return []
@@ -147,7 +135,6 @@ def extract_all_colored_numbers(image_path: str) -> list:
     numbers = [n.replace(',', '.') for n in numbers]
 
     print(f"Найдено размеров: {numbers}")
-    # Фильтруем: целые числа >= 10, не начинаются с 0
     filtered = []
     for n in numbers:
         try:
@@ -156,6 +143,6 @@ def extract_all_colored_numbers(image_path: str) -> list:
                 filtered.append(n)
         except ValueError:
             pass
-    
+
     print(f"Найдено размеров (>=10): {filtered}")
     return filtered

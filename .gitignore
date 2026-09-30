@@ -1,4 +1,48 @@
-.env
-venv/
+# ─── Python ───
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+
+# ─── Виртуальное окружение ───
+venv/
+env/
+.venv/
+ENV/
+
+# ─── IDE / редакторы ───
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ─── База данных (рабочие данные — не в Git) ───
+*.db
+*.db.backup*
+*.sqlite
+*.sqlite3
+
+# ─── Секреты (API-ключи!) ───
+.env
+.env.local
+.env.*.local
+
+# ─── Загруженные пользователями файлы ───
+app/static/uploads/
+!app/static/uploads/.gitkeep
+
+# ─── Отладочные папки ───
+app/static/uploads/debug/
+app/static/uploads/debug_gch/
+app/static/uploads/temp/
+
+# ─── Временные файлы ───
+*.log
+*.tmp
+temp/
+.DS_Store
+Thumbs.db
