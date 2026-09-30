@@ -30,12 +30,12 @@
 
 ### 1. Клонировать репозиторий
 
-git clone <URL_РЕПОЗИТОРИЯ>
+git clone <URL_РЕПОЗИТОРИЯ> <br>
 cd otk_scanner
 
 ### 2. Создать виртуальное окружение
 
-python -m venv venv
+python -m venv venv <br>
 venv\Scripts\activate
 
 Для Linux/Mac: source venv/bin/activate
@@ -46,7 +46,7 @@ pip install -r requirements.txt
 
 ### 4. Создать файл .env в корне проекта
 
-YANDEX_API_KEY=ваш_api_ключ
+YANDEX_API_KEY=ваш_api_ключ <br>
 YANDEX_FOLDER_ID=ваш_folder_id
 
 API-ключ и folder_id берутся в Yandex Cloud Console.
@@ -68,25 +68,44 @@ uvicorn app.main:app --reload
 
 ## Структура проекта
 
+```
 otk_scanner/
-  app/
-    main.py              — точка входа приложения
-    auth.py              — аутентификация и сессии
-    database.py          — работа с БД
-    routes.py            — пользовательские роуты и API
-    admin_routes.py      — админские роуты
-    ocr_engine.py        — Yandex Vision OCR
-    param_extractor.py   — YandexGPT для извлечения параметров
-    green_extractor.py   — распознавание цветных размеров на ГЧ
-    patterns.py          — регулярки для номеров документов
-    shildik_generator.py — генерация SVG шильдика
-    templates/           — HTML-шаблоны
-    static/              — CSS и загруженные фото
-  .env                   — секреты (не в Git)
-  .gitignore
-  otk.db                 — база данных (не в Git)
-  requirements.txt
-  README.md
+├── app/
+│   ├── main.py                — точка входа приложения
+│   ├── auth.py                — аутентификация и сессии
+│   ├── database.py            — работа с БД
+│   ├── routes.py              — пользовательские роуты и API
+│   ├── admin_routes.py        — админские роуты
+│   ├── ocr_engine.py          — Yandex Vision OCR
+│   ├── param_extractor.py     — YandexGPT для извлечения параметров
+│   ├── green_extractor.py     — распознавание цветных размеров на ГЧ
+│   ├── patterns.py            — регулярки для номеров документов
+│   ├── shildik_generator.py   — генерация SVG шильдика
+│   ├── templates/             — HTML-шаблоны
+│   │   ├── base.html
+│   │   ├── login.html
+│   │   ├── dashboard.html
+│   │   ├── scan.html
+│   │   ├── check_gch.html
+│   │   ├── check_g3.html
+│   │   ├── check_pg3.html
+│   │   ├── visual_check.html
+│   │   ├── measurements.html
+│   │   ├── protocol.html
+│   │   ├── photo.html
+│   │   ├── shildik.html
+│   │   ├── admin.html
+│   │   └── admin_requests.html
+│   └── static/
+│       ├── css/
+│       │   └── style.css
+│       └── uploads/           — загруженные фото (не в Git)
+├── .env                       — секреты (не в Git)
+├── .gitignore
+├── otk.db                     — база данных (не в Git)
+├── requirements.txt
+└── README.md
+```
 
 ## Основные эндпоинты
 
