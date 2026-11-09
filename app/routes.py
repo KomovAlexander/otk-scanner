@@ -1591,3 +1591,48 @@ def api_permission_status(request: Request):
     from app.database import get_active_permission
     perm = get_active_permission(int(order_id), type_)
     return JSONResponse({"status": "ok", "permission": perm})
+
+
+# ── Чат заказа ─────────────────────────────────────
+@router.get("/api/chat/{order_id}")
+def api_get_chat(request: Request, order_id: int):
+    """Возвращает все сообщения чата по заказу."""
+    user = get_current_user(request)
+    if not user:
+        return JSONResponse({"status": "error"}, status_code=401)
+
+    from app.database import get_chat_messages
+    messages = get_chat_messages(order_id)
+    return JSONResponse({"status": "ok", "messages": messages})
+
+
+@router.post("/api/chat/{order_id}")
+async def api_post_chat(request: Request, order_id: int):
+    """Принимает сообщение (текст и/или фото) и сохраняет в БД."""
+    user = get_current_user(request)
+    if not user:
+        return JSONResponse({"status": "error"}, status_code=401)
+
+    form = await request.form()
+    text = (form.get("text") or "").strip()
+    photo = form.get("photo")
+
+    photo_path = ""
+    if photo and hasattr(photo, "filename") and photo.filename:
+        chat_dir = os.path.join(UPLOAD_ROOT, f"order_{order_id}", "chat")
+        os.makedirs(chat_dir, exist_ok=True)
+        fname = f"chat_{uuid.uuid4().hex[:8]}.jpg"
+        full_path = os.path.join(chat_dir, fname)
+        with open(full_path, "wb") as buffer:
+            shutil.copyfileobj(photo.file, buffer)
+        photo_path = f"/uploads/order_{order_id}/chat/{fname}"
+
+    if not text and not photo_path:
+        return JSONResponse(
+            {"status": "error", "message": "Пустое сообщение"},
+            status_code=400
+        )
+
+    from app.database import add_chat_message
+    rid = add_chat_message(order_id, user["id"], text, photo_path)
+    return JSONResponse({"status": "ok", "id": rid})

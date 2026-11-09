@@ -301,11 +301,15 @@
                 <span class="progress-step future">⏳ {{ step_names[key].split(' ', 1)[1] }}</span>
             {% endif %}
         {% endfor %}
+        <a href="javascript:void(0)" onclick="openChat()" style="position:relative; padding:8px 16px; border-radius:8px; font-size:13px; font-weight:600; text-decoration:none; background:#2196f3; color:#fff; margin-left:8px;">
+            💬 Чат
+            <span id="chatBadge" style="display:none; position:absolute; top:-6px; right:-6px; background:#f44336; color:#fff; border-radius:10px; padding:1px 6px; font-size:10px; font-weight:700;"></span>
+        </a>        
     </div>
     {% endif %}
 
     {% block content %}{% endblock %}
-    <div id="lightbox" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 9999; cursor: zoom-out; justify-content: center; align-items: center; flex-direction: column;" onclick="closeLightbox()">
+    <div id="lightbox" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 10050; cursor: zoom-out; justify-content: center; align-items: center; flex-direction: column;" onclick="closeLightbox()">
         <div style="display: flex; gap: 16px; margin-bottom: 16px; z-index: 10000;" onclick="event.stopPropagation();">
             <button onclick="rotateLightbox(-90)" style="padding: 10px 16px; background: #2a2d35; color: #fff; border: 1px solid #3a3d45; border-radius: 8px; cursor: pointer; font-size: 18px;">⟲</button>
             <button onclick="rotateLightbox(90)" style="padding: 10px 16px; background: #2a2d35; color: #fff; border: 1px solid #3a3d45; border-radius: 8px; cursor: pointer; font-size: 18px;">⟳</button>
@@ -322,6 +326,22 @@
             <div id="universalModalButtons" style="display:flex; gap:10px;"></div>
         </div>
     </div>
+    <!-- Модалка чата заказа -->
+    <div id="chatModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.75); z-index:10001; justify-content:center; align-items:center; padding:16px;">
+        <div style="background:#1e2128; border-radius:16px; width:100%; max-width:600px; height:80vh; display:flex; flex-direction:column;">
+            <div style="display:flex; justify-content:space-between; align-items:center; padding:16px 20px; border-bottom:1px solid #2a2d35;">
+                <h3 style="color:#ff6b35; margin:0; font-size:17px;">💬 Обсуждение заказа</h3>
+                <button onclick="closeChat()" style="background:#f44336; color:#fff; border:none; border-radius:6px; padding:6px 12px; cursor:pointer; font-size:14px;">✕</button>
+            </div>
+            <div id="chatMessages" style="flex:1; overflow-y:auto; padding:16px 20px;"></div>
+            <div style="padding:12px 16px; border-top:1px solid #2a2d35; display:flex; gap:8px; align-items:flex-end;">
+                <textarea id="chatInput" placeholder="Написать сообщение..." style="flex:1; background:#2a2d35; border:1px solid #3a3d45; border-radius:8px; color:#fff; padding:10px; font-size:14px; resize:none; min-height:42px; max-height:120px; font-family:inherit;"></textarea>
+                <input type="file" id="chatPhoto" accept="image/*" hidden>
+                <button onclick="document.getElementById('chatPhoto').click()" style="background:#2a2d35; color:#ccc; border:1px solid #3a3d45; border-radius:8px; padding:10px 14px; cursor:pointer; font-size:16px;" title="Прикрепить фото">📎</button>
+                <button onclick="sendChat()" style="background:#ff6b35; color:#fff; border:none; border-radius:8px; padding:10px 18px; font-weight:600; cursor:pointer; font-size:16px;">➤</button>
+            </div>
+        </div>
+    </div>    
     <script>
         let lightboxRotation = 0;
         let currentImageSrc = '';
@@ -476,7 +496,130 @@
 
         function closeUniversalModal() {
             document.getElementById('universalModal').style.display = 'none';
+        }    
+        // ── Чат заказа ──
+        let chatOrderId = new URLSearchParams(window.location.search).get('order_id');
+        let chatPoll = null;
+
+        function openChat() {
+            if (!chatOrderId) {
+                showInfoModal('Чат доступен внутри заказа. Откройте заказ и нажмите «Чат».', 'Внимание');
+                return;
+            }
+            document.getElementById('chatModal').style.display = 'flex';
+            loadChat();
+            if (chatPoll) clearInterval(chatPoll);
+            chatPoll = setInterval(loadChat, 5000);
+        }
+
+        function closeChat() {
+            document.getElementById('chatModal').style.display = 'none';
+            if (chatPoll) { clearInterval(chatPoll); chatPoll = null; }
+            const prev = document.getElementById('chatPhotoPreview');
+            if (prev) prev.remove();
+            const ph = document.getElementById('chatPhoto');
+            if (ph) ph.value = '';
+        }
+
+        async function loadChat() {
+            if (!chatOrderId) return;
+            try {
+                const res = await fetch(`/api/chat/${chatOrderId}`);
+                const data = await res.json();
+                if (data.status !== 'ok') return;
+                const box = document.getElementById('chatMessages');
+                const wasBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 60;
+                box.innerHTML = data.messages.map(m => `
+                    <div style="margin-bottom:14px;">
+                        <div style="font-size:12px; color:#888; margin-bottom:3px;">
+                            <strong style="color:#ff6b35;">${escapeHtml(m.last_name || '')} ${escapeHtml(m.first_name || m.login || '')}</strong>
+                            · ${formatChatTime(m.created_at)}
+                        </div>
+                        ${m.text ? `<div style="background:#2a2d35; padding:9px 13px; border-radius:8px; font-size:14px; white-space:pre-wrap; line-height:1.45;">${escapeHtml(m.text)}</div>` : ''}
+                        ${m.photo_path ? `<img src="${m.photo_path}" style="max-width:220px; border-radius:8px; margin-top:6px; cursor:pointer; display:block;" onclick="openLightbox('${m.photo_path}')">` : ''}
+                    </div>
+                `).join('') || '<div style="color:#666; text-align:center; padding:40px 0;">Сообщений пока нет. Напишите первым.</div>';
+                if (wasBottom) box.scrollTop = box.scrollHeight;
+            } catch (e) {}
+        }
+
+        function escapeHtml(str) {
+            if (!str) return '';
+            return String(str).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+        }
+        function formatChatTime(utcStr) {
+            if (!utcStr) return '';
+            // SQLite отдаёт "2026-11-09 12:34:56" — это UTC
+            const iso = utcStr.replace(' ', 'T') + 'Z';
+            const d = new Date(iso);
+            if (isNaN(d.getTime())) return utcStr;
+            const pad = n => String(n).padStart(2, '0');
+            return `${pad(d.getDate())}.${pad(d.getMonth()+1)}.${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
         }        
+        async function sendChat() {
+            if (!chatOrderId) return;
+            const input = document.getElementById('chatInput');
+            const photoInput = document.getElementById('chatPhoto');
+            const text = input.value.trim();
+            const photo = photoInput.files[0];
+
+            if (!text && !photo) return;
+
+            const sendBtn = document.querySelector('#chatModal button[onclick="sendChat()"]');
+            if (sendBtn) { sendBtn.disabled = true; sendBtn.textContent = '…'; }
+
+            const fd = new FormData();
+            fd.append('text', text);
+            if (photo) fd.append('photo', photo);
+
+            try {
+                await fetch(`/api/chat/${chatOrderId}`, { method: 'POST', body: fd });
+                input.value = '';
+                photoInput.value = '';
+                await loadChat();
+                const box = document.getElementById('chatMessages');
+                box.scrollTop = box.scrollHeight;
+            } catch (e) {
+                showInfoModal('Не удалось отправить сообщение. Попробуйте ещё раз.', 'Ошибка');
+            } finally {
+                if (sendBtn) { sendBtn.disabled = false; sendBtn.textContent = '➤'; }
+            }
+        }
+        // Enter — отправить, Shift+Enter — перенос строки
+        document.addEventListener('DOMContentLoaded', function() {
+            const chatInput = document.getElementById('chatInput');
+            if (chatInput) {
+                chatInput.addEventListener('keydown', function(e) {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        sendChat();
+                    }
+                });
+            }
+            const chatPhoto = document.getElementById('chatPhoto');
+            if (chatPhoto) {
+                chatPhoto.addEventListener('change', function() {
+                    const file = this.files[0];
+                    const existing = document.getElementById('chatPhotoPreview');
+                    if (existing) existing.remove();
+                    if (!file) return;
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                        const wrap = document.createElement('div');
+                        wrap.id = 'chatPhotoPreview';
+                        wrap.style.cssText = 'padding:8px 16px 0; display:flex; align-items:center; gap:10px;';
+                        wrap.innerHTML = `
+                            <img src="${e.target.result}" style="max-height:60px; border-radius:6px;">
+                            <span style="font-size:12px; color:#888;">Фото прикреплено</span>
+                            <button type="button" onclick="document.getElementById('chatPhoto').value=''; this.parentElement.remove();" style="background:#f44336; color:#fff; border:none; border-radius:4px; padding:2px 8px; cursor:pointer; font-size:12px;">✕</button>
+                        `;
+                        const inputRow = document.querySelector('#chatModal > div > div:last-child');
+                        inputRow.parentElement.insertBefore(wrap, inputRow);
+                    };
+                    reader.readAsDataURL(file);
+                });
+            }
+        });                            
     </script>
     {% block extra_js %}{% endblock %}
 </body>

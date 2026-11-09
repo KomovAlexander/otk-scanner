@@ -146,7 +146,19 @@ def init_db():
             FOREIGN KEY (user_id) REFERENCES users(id)
         )
     """)
-
+    # Сообщения чата (обсуждение внутри заказа)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS chat_messages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            order_id INTEGER NOT NULL,
+            user_id INTEGER NOT NULL,
+            text TEXT DEFAULT '',
+            photo_path TEXT DEFAULT '',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (order_id) REFERENCES orders(id),
+            FOREIGN KEY (user_id) REFERENCES users(id)
+        )
+    """)
     # Добавляем колонку user_id если её нет
     cursor.execute("PRAGMA table_info(orders)")
     columns = [row["name"] for row in cursor.fetchall()]
@@ -647,4 +659,36 @@ def count_pending_requests() -> int:
     cursor.execute("SELECT COUNT(*) FROM permission_requests WHERE status='pending'")
     n = cursor.fetchone()[0]
     conn.close()
-    return n        
+    return n
+
+
+# ─── Функции для работы с чатом заказа ───
+def get_chat_messages(order_id: int, limit: int = 200) -> list:
+    """Возвращает сообщения чата по заказу (старые сверху)."""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT cm.*, u.first_name, u.last_name, u.login, u.role
+        FROM chat_messages cm
+        JOIN users u ON u.id = cm.user_id
+        WHERE cm.order_id = ?
+        ORDER BY cm.id ASC
+        LIMIT ?
+    """, (order_id, limit))
+    rows = [dict(r) for r in cursor.fetchall()]
+    conn.close()
+    return rows
+
+
+def add_chat_message(order_id: int, user_id: int, text: str, photo_path: str = "") -> int:
+    """Добавляет сообщение в чат заказа. Возвращает id."""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "INSERT INTO chat_messages (order_id, user_id, text, photo_path) VALUES (?,?,?,?)",
+        (order_id, user_id, text, photo_path)
+    )
+    conn.commit()
+    rid = cursor.lastrowid
+    conn.close()
+    return rid
