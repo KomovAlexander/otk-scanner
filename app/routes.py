@@ -1593,6 +1593,63 @@ def api_permission_status(request: Request):
     return JSONResponse({"status": "ok", "permission": perm})
 
 
+# ── Поиск пользователей для @-подсказки ────────────
+@router.get("/api/users/search")
+def api_users_search(request: Request):
+    """Поиск пользователей по логину/фамилии/имени для автодополнения @.
+    Фильтрация в Python — потому что SQLite LOWER() не работает с кириллицей."""
+    user = get_current_user(request)
+    if not user:
+        return JSONResponse({"status": "error"}, status_code=401)
+
+    q = (request.query_params.get("q") or "").strip().lower()
+
+    from app.database import get_db
+    conn = get_db()
+    cursor = conn.cursor()
+    # Выбираем всех — пользователей немного, фильтруем в Python
+    cursor.execute("SELECT id, login, first_name, last_name, role FROM users ORDER BY last_name, first_name")
+    rows = [dict(r) for r in cursor.fetchall()]
+    conn.close()
+
+    # Фильтрация в Python — корректно работает с кириллицей
+    if q:
+        filtered = []
+        for r in rows:
+            login_l = (r["login"] or "").lower()
+            last_l = (r["last_name"] or "").lower()
+            first_l = (r["first_name"] or "").lower()
+            if q in login_l or q in last_l or q in first_l:
+                filtered.append(r)
+        rows = filtered
+
+    # Себя не предлагаем
+    rows = [r for r in rows if r["id"] != user["id"]]
+    rows = rows[:10]
+
+    # Спец-пункт для группы админов — всегда первым
+    result = [{
+        "id": 0,
+        "login": "админ",
+        "first_name": "",
+        "last_name": "Группа: все администраторы",
+        "role": "group",
+        "is_group": True
+    }]
+
+    for r in rows:
+        result.append({
+            "id": r["id"],
+            "login": r["login"],
+            "first_name": r["first_name"] or "",
+            "last_name": r["last_name"] or "",
+            "role": r["role"],
+            "is_group": False
+        })
+
+    return JSONResponse({"status": "ok", "users": result})
+
+
 # ── Чат заказа ─────────────────────────────────────
 @router.get("/api/chat/{order_id}")
 def api_get_chat(request: Request, order_id: int):
@@ -1633,6 +1690,77 @@ async def api_post_chat(request: Request, order_id: int):
             status_code=400
         )
 
-    from app.database import add_chat_message
+    from app.database import add_chat_message, add_mention, add_notification, \
+        find_user_by_login_or_name, get_admin_users
+
     rid = add_chat_message(order_id, user["id"], text, photo_path)
+
+    # ── Парсинг @-упоминаний ──
+    if text:
+        import re as _re
+        # Находим все @слово (буквы, цифры, подчёркивание, дефис)
+        found = _re.findall(r'@([A-Za-zА-Яа-я0-9_\-]+)', text)
+        seen_user_ids = set()
+
+        for token in found:
+            token_low = token.lower()
+
+            # Группа @админ / @admin → все админы
+            if token_low in ("админ", "admin", "админы", "admins"):
+                for adm in get_admin_users():
+                    if adm["id"] == user["id"]:
+                        continue  # себя не уведомляем
+                    if adm["id"] in seen_user_ids:
+                        continue
+                    seen_user_ids.add(adm["id"])
+                    add_mention(rid, adm["id"])
+                    add_notification(
+                        adm["id"], order_id, rid,
+                        f"Вас упомянули в чате заказа (группа @{token})"
+                    )
+                continue
+
+            # Конкретный пользователь
+            target = find_user_by_login_or_name(token)
+            if target and target["id"] != user["id"] and target["id"] not in seen_user_ids:
+                seen_user_ids.add(target["id"])
+                add_mention(rid, target["id"])
+                add_notification(
+                    target["id"], order_id, rid,
+                    f"Вас упомянули в чате заказа"
+                )
+
     return JSONResponse({"status": "ok", "id": rid})
+
+
+# ── Уведомления (звоночек) ──────────────────────────
+@router.get("/api/notifications")
+def api_notifications(request: Request):
+    """Непрочитанные уведомления текущего пользователя + их количество."""
+    user = get_current_user(request)
+    if not user:
+        return JSONResponse({"status": "error"}, status_code=401)
+
+    from app.database import get_unread_notifications, count_unread_notifications
+    items = get_unread_notifications(user["id"])
+    total = count_unread_notifications(user["id"])
+    return JSONResponse({"status": "ok", "count": total, "items": items})
+
+
+@router.post("/api/notifications/read")
+async def api_notifications_read(request: Request):
+    """Помечает уведомления прочитанными (по заказу или все)."""
+    user = get_current_user(request)
+    if not user:
+        return JSONResponse({"status": "error"}, status_code=401)
+
+    data = await request.json()
+    order_id = data.get("order_id")
+
+    from app.database import mark_notifications_read
+    if order_id:
+        mark_notifications_read(user["id"], int(order_id))
+    else:
+        mark_notifications_read(user["id"])
+
+    return JSONResponse({"status": "ok"})

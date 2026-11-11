@@ -159,6 +159,34 @@ def init_db():
             FOREIGN KEY (user_id) REFERENCES users(id)
         )
     """)
+    # Упоминания в сообщениях чата
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS mentions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            message_id INTEGER NOT NULL,
+            mentioned_user_id INTEGER NOT NULL,
+            is_read INTEGER DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (message_id) REFERENCES chat_messages(id),
+            FOREIGN KEY (mentioned_user_id) REFERENCES users(id)
+        )
+    """)
+
+    # Уведомления для звоночка
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS notifications (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            order_id INTEGER NOT NULL,
+            message_id INTEGER,
+            type TEXT DEFAULT 'mention',
+            text TEXT DEFAULT '',
+            is_read INTEGER DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id),
+            FOREIGN KEY (order_id) REFERENCES orders(id)
+        )
+    """)
     # Добавляем колонку user_id если её нет
     cursor.execute("PRAGMA table_info(orders)")
     columns = [row["name"] for row in cursor.fetchall()]
@@ -264,7 +292,8 @@ def save_pg3_page(order_id: int, page_number: int, pg3_number: str, items: list)
     cursor = conn.cursor()
     cursor.execute(
         "INSERT OR REPLACE INTO pg3_pages (order_id, page_number, pg3_number, items) VALUES (?, ?, ?, ?)",
-        (order_id, page_number, pg3_number, json.dumps(normalized_items, ensure_ascii=False))
+        (order_id, page_number, pg3_number, json.dumps(
+            normalized_items, ensure_ascii=False))
     )
     conn.commit()
     conn.close()
@@ -293,7 +322,8 @@ def clear_visual_pg3_for_order(order_id: int):
     """Очищает только ПГ3-часть визуального контроля."""
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT data FROM visual_results WHERE order_id = ?", (order_id,))
+    cursor.execute(
+        "SELECT data FROM visual_results WHERE order_id = ?", (order_id,))
     row = cursor.fetchone()
 
     if row:
@@ -304,7 +334,8 @@ def clear_visual_pg3_for_order(order_id: int):
             "UPDATE visual_results SET data=?, updated_at=CURRENT_TIMESTAMP WHERE order_id=?",
             (json.dumps(data, ensure_ascii=False), order_id)
         )
-        print(f"✅ ПГ3-часть визуального контроля очищена для order_id={order_id}")
+        print(
+            f"✅ ПГ3-часть визуального контроля очищена для order_id={order_id}")
     else:
         print(f"⚠️ Визуальный контроль не найден для order_id={order_id}")
 
@@ -316,11 +347,13 @@ def clear_visual_pg3_for_order(order_id: int):
 def get_or_create_order(order_number: str, product_name: str, department: str, user_id: int = None) -> int:
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT id FROM orders WHERE order_number = ?", (order_number,))
+    cursor.execute(
+        "SELECT id FROM orders WHERE order_number = ?", (order_number,))
     existing = cursor.fetchone()
     if existing:
         if user_id:
-            cursor.execute("UPDATE orders SET user_id=? WHERE id=?", (user_id, existing["id"]))
+            cursor.execute("UPDATE orders SET user_id=? WHERE id=?",
+                           (user_id, existing["id"]))
         conn.commit()
         conn.close()
         init_order_progress(existing["id"])
@@ -379,7 +412,8 @@ def get_visual_results(order_id: int) -> dict:
     """Загружает результаты визуального контроля."""
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT data FROM visual_results WHERE order_id = ?", (order_id,))
+    cursor.execute(
+        "SELECT data FROM visual_results WHERE order_id = ?", (order_id,))
     row = cursor.fetchone()
     conn.close()
     if row:
@@ -403,7 +437,8 @@ def get_measurement_results(order_id: int) -> dict:
     """Загружает результаты измерений."""
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT data FROM measurement_results WHERE order_id = ?", (order_id,))
+    cursor.execute(
+        "SELECT data FROM measurement_results WHERE order_id = ?", (order_id,))
     row = cursor.fetchone()
     conn.close()
     if row:
@@ -467,7 +502,8 @@ def delete_user(user_id: int):
     """Удаляет пользователя."""
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("DELETE FROM users WHERE id = ? AND login != 'admin'", (user_id,))
+    cursor.execute(
+        "DELETE FROM users WHERE id = ? AND login != 'admin'", (user_id,))
     conn.commit()
     conn.close()
 
@@ -490,7 +526,8 @@ def update_user_password(user_id: int, new_password: str):
     conn = get_db()
     cursor = conn.cursor()
     password_hash = hashlib.sha256(new_password.encode()).hexdigest()
-    cursor.execute("UPDATE users SET password_hash=? WHERE id=?", (password_hash, user_id))
+    cursor.execute("UPDATE users SET password_hash=? WHERE id=?",
+                   (password_hash, user_id))
     conn.commit()
     conn.close()
 
@@ -554,9 +591,12 @@ def delete_order(order_id: int):
     cursor.execute("DELETE FROM g3_data WHERE order_id = ?", (order_id,))
     cursor.execute("DELETE FROM pg3_data WHERE order_id = ?", (order_id,))
     cursor.execute("DELETE FROM pg3_pages WHERE order_id = ?", (order_id,))
-    cursor.execute("DELETE FROM visual_results WHERE order_id = ?", (order_id,))
-    cursor.execute("DELETE FROM measurement_results WHERE order_id = ?", (order_id,))
-    cursor.execute("DELETE FROM order_progress WHERE order_id = ?", (order_id,))
+    cursor.execute(
+        "DELETE FROM visual_results WHERE order_id = ?", (order_id,))
+    cursor.execute(
+        "DELETE FROM measurement_results WHERE order_id = ?", (order_id,))
+    cursor.execute(
+        "DELETE FROM order_progress WHERE order_id = ?", (order_id,))
     cursor.execute("DELETE FROM orders WHERE id = ?", (order_id,))
 
     conn.commit()
@@ -566,7 +606,6 @@ def delete_order(order_id: int):
     order_dir = os.path.join("app/static/uploads", f"order_{order_id}")
     if os.path.exists(order_dir):
         shutil.rmtree(order_dir)
-
 
 
 # ─── Функции для работы с запросами разрешений ───
@@ -656,7 +695,8 @@ def count_pending_requests() -> int:
     """Сколько запросов ждут ответа админа."""
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT COUNT(*) FROM permission_requests WHERE status='pending'")
+    cursor.execute(
+        "SELECT COUNT(*) FROM permission_requests WHERE status='pending'")
     n = cursor.fetchone()[0]
     conn.close()
     return n
@@ -692,3 +732,104 @@ def add_chat_message(order_id: int, user_id: int, text: str, photo_path: str = "
     rid = cursor.lastrowid
     conn.close()
     return rid
+
+# ─── Функции для работы с уведомлениями ───
+
+
+def get_admin_users() -> list:
+    """Возвращает всех пользователей с ролью admin (для группы @админ)."""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT id, login, first_name, last_name FROM users WHERE role = 'admin'")
+    rows = [dict(r) for r in cursor.fetchall()]
+    conn.close()
+    return rows
+
+
+def find_user_by_login_or_name(query: str) -> dict | None:
+    """Ищет пользователя по логину или фамилии (без учёта регистра)."""
+    q = (query or "").strip().lower()
+    if not q:
+        return None
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT id, login, first_name, last_name FROM users
+        WHERE LOWER(login) = ? OR LOWER(last_name) = ? OR LOWER(first_name) = ?
+        LIMIT 1
+    """, (q, q, q))
+    row = cursor.fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def add_mention(message_id: int, user_id: int):
+    """Создаёт запись об упоминании."""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "INSERT INTO mentions (message_id, mentioned_user_id) VALUES (?,?)",
+        (message_id, user_id)
+    )
+    conn.commit()
+    conn.close()
+
+
+def add_notification(user_id: int, order_id: int, message_id: int, text: str, type_: str = "mention"):
+    """Создаёт уведомление для пользователя."""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "INSERT INTO notifications (user_id, order_id, message_id, type, text) VALUES (?,?,?,?,?)",
+        (user_id, order_id, message_id, type_, text)
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_unread_notifications(user_id: int, limit: int = 20) -> list:
+    """Непрочитанные уведомления пользователя (свежие сверху) + данные заказа и автора."""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT n.*, o.order_number, o.product_name,
+               u.last_name AS author_last, u.first_name AS author_first, u.login AS author_login
+        FROM notifications n
+        JOIN orders o ON o.id = n.order_id
+        LEFT JOIN chat_messages cm ON cm.id = n.message_id
+        LEFT JOIN users u ON u.id = cm.user_id
+        WHERE n.user_id = ? AND n.is_read = 0
+        ORDER BY n.id DESC
+        LIMIT ?
+    """, (user_id, limit))
+    rows = [dict(r) for r in cursor.fetchall()]
+    conn.close()
+    return rows
+
+
+def count_unread_notifications(user_id: int) -> int:
+    """Сколько непрочитанных уведомлений у пользователя."""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT COUNT(*) FROM notifications WHERE user_id = ? AND is_read = 0", (user_id,))
+    n = cursor.fetchone()[0]
+    conn.close()
+    return n
+
+
+def mark_notifications_read(user_id: int, order_id: int = None):
+    """Помечает уведомления прочитанными (все или по конкретному заказу)."""
+    conn = get_db()
+    cursor = conn.cursor()
+    if order_id is not None:
+        cursor.execute(
+            "UPDATE notifications SET is_read = 1 WHERE user_id = ? AND order_id = ?",
+            (user_id, order_id)
+        )
+    else:
+        cursor.execute(
+            "UPDATE notifications SET is_read = 1 WHERE user_id = ?", (user_id,))
+    conn.commit()
+    conn.close()

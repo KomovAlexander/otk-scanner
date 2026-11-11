@@ -254,6 +254,10 @@
             {% if user.role == 'admin' %}
             <a href="/admin">⚙️ Админка</a>
             {% endif %}
+            <a href="javascript:void(0)" onclick="toggleNotifications(event)" style="position:relative;">
+                🔔
+                <span id="notifBadge" style="display:none; position:absolute; top:-6px; right:-8px; background:#f44336; color:#fff; border-radius:10px; padding:1px 6px; font-size:10px; font-weight:700;">0</span>
+            </a>            
             <a href="/dashboard">📋 Мои заказы</a>
             <a href="/logout" style="color:#f44336;">🚪 Выйти</a>
         </div>
@@ -334,6 +338,8 @@
                 <button onclick="closeChat()" style="background:#f44336; color:#fff; border:none; border-radius:6px; padding:6px 12px; cursor:pointer; font-size:14px;">✕</button>
             </div>
             <div id="chatMessages" style="flex:1; overflow-y:auto; padding:16px 20px;"></div>
+            <div id="chatMentionsBox" style="display:none; max-height:180px; overflow-y:auto; border-top:1px solid #2a2d35; background:#1a1d23;">
+            </div>            
             <div style="padding:12px 16px; border-top:1px solid #2a2d35; display:flex; gap:8px; align-items:flex-end;">
                 <textarea id="chatInput" placeholder="Написать сообщение..." style="flex:1; background:#2a2d35; border:1px solid #3a3d45; border-radius:8px; color:#fff; padding:10px; font-size:14px; resize:none; min-height:42px; max-height:120px; font-family:inherit;"></textarea>
                 <input type="file" id="chatPhoto" accept="image/*" hidden>
@@ -341,6 +347,11 @@
                 <button onclick="sendChat()" style="background:#ff6b35; color:#fff; border:none; border-radius:8px; padding:10px 18px; font-weight:600; cursor:pointer; font-size:16px;">➤</button>
             </div>
         </div>
+    </div>    
+    <!-- Выпадающий список уведомлений -->
+    <div id="notifDropdown" style="display:none; position:fixed; top:56px; right:16px; width:340px; max-height:400px; overflow-y:auto; background:#1e2128; border:1px solid #2a2d35; border-radius:12px; z-index:10002; box-shadow:0 8px 24px rgba(0,0,0,0.5);">
+        <div style="padding:12px 16px; border-bottom:1px solid #2a2d35; font-size:14px; font-weight:600; color:#ff6b35;">Уведомления</div>
+        <div id="notifList"></div>
     </div>    
     <script>
         let lightboxRotation = 0;
@@ -510,6 +521,12 @@
             loadChat();
             if (chatPoll) clearInterval(chatPoll);
             chatPoll = setInterval(loadChat, 5000);
+            // Помечаем уведомления по этому заказу прочитанными
+            fetch('/api/notifications/read', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ order_id: parseInt(chatOrderId) })
+            }).then(() => loadNotifications()).catch(() => {});            
         }
 
         function closeChat() {
@@ -519,6 +536,7 @@
             if (prev) prev.remove();
             const ph = document.getElementById('chatPhoto');
             if (ph) ph.value = '';
+            hideMentions();
         }
 
         async function loadChat() {
@@ -596,6 +614,13 @@
                     }
                 });
             }
+            if (chatInput) {
+                chatInput.addEventListener('input', onChatInput);
+                chatInput.addEventListener('click', onChatInput);
+                chatInput.addEventListener('blur', function() {
+                    setTimeout(hideMentions, 200);  // чтобы клик по подсказке успел сработать
+                });
+            }            
             const chatPhoto = document.getElementById('chatPhoto');
             if (chatPhoto) {
                 chatPhoto.addEventListener('change', function() {
@@ -619,7 +644,170 @@
                     reader.readAsDataURL(file);
                 });
             }
-        });                            
+        });     
+        document.addEventListener('DOMContentLoaded', function() {
+            const params = new URLSearchParams(window.location.search);
+            if (params.get('open_chat') === '1' && chatOrderId) {
+                openChat();
+                // Убираем параметр из URL, чтобы не открывалось при обновлении
+                params.delete('open_chat');
+                const newUrl = window.location.pathname + (params.toString() ? '?' + params.toString() : '');
+                window.history.replaceState({}, '', newUrl);
+            }
+        });        
+        // ── @-подсказки в чате ──
+        let mentionQuery = null;   // текущий запрос после @ или null
+        let mentionStart = -1;     // позиция @ в тексте
+        let mentionTimer = null;
+
+        function getChatInput() {
+            return document.getElementById('chatInput');
+        }
+
+        function hideMentions() {
+            const box = document.getElementById('chatMentionsBox');
+            if (box) { box.style.display = 'none'; box.innerHTML = ''; }
+            mentionQuery = null;
+            mentionStart = -1;
+        }
+
+        async function loadMentions(q) {
+            try {
+                const res = await fetch(`/api/users/search?q=${encodeURIComponent(q)}`);
+                const data = await res.json();
+                if (data.status !== 'ok') return;
+                const box = document.getElementById('chatMentionsBox');
+                if (!box) return;
+                if (!data.users || data.users.length === 0) { hideMentions(); return; }
+
+                box.innerHTML = data.users.map(u => {
+                    const label = u.is_group
+                        ? `👥 ${escapeHtml(u.last_name)}`
+                        : `${escapeHtml(u.last_name || '')} ${escapeHtml(u.first_name || '')} <span style="color:#666;">(@${escapeHtml(u.login)})</span>`;
+                    return `<div onclick="pickMention('${escapeHtml(u.login)}')"
+                        style="padding:10px 16px; cursor:pointer; font-size:14px; color:#e0e0e0; border-bottom:1px solid #2a2d35;"
+                        onmouseover="this.style.background='#2a2d35'"
+                        onmouseout="this.style.background='transparent'">
+                        ${label}
+                    </div>`;
+                }).join('');
+                box.style.display = 'block';
+            } catch (e) {}
+        }
+
+        function pickMention(login) {
+            const input = getChatInput();
+            if (!input || mentionStart < 0) return;
+            const before = input.value.slice(0, mentionStart);
+            const after = input.value.slice(input.selectionStart);
+            input.value = before + '@' + login + ' ' + after;
+            const newPos = (before + '@' + login + ' ').length;
+            input.setSelectionRange(newPos, newPos);
+            input.focus();
+            hideMentions();
+        }
+
+        function onChatInput() {
+            const input = getChatInput();
+            if (!input) return;
+            const val = input.value;
+            const caret = input.selectionStart;
+
+            // Ищем @ перед кареткой (до 30 символов назад)
+            const beforeCaret = val.slice(0, caret);
+            const atPos = beforeCaret.lastIndexOf('@');
+
+            if (atPos < 0) { hideMentions(); return; }
+
+            // Между @ и кареткой не должно быть пробелов
+            const between = beforeCaret.slice(atPos + 1);
+            if (/\s/.test(between)) { hideMentions(); return; }
+
+            mentionStart = atPos;
+            mentionQuery = between;
+
+            // Дебаунс: не дёргаем API на каждый символ
+            if (mentionTimer) clearTimeout(mentionTimer);
+            mentionTimer = setTimeout(() => loadMentions(mentionQuery), 200);
+        }     
+        // ── Уведомления (звоночек) ──
+        let notifPoll = null;
+
+        async function loadNotifications() {
+            try {
+                const res = await fetch('/api/notifications');
+                const data = await res.json();
+                if (data.status !== 'ok') return;
+                const badge = document.getElementById('notifBadge');
+                if (badge) {
+                    if (data.count > 0) {
+                        badge.textContent = data.count;
+                        badge.style.display = 'inline';
+                    } else {
+                        badge.style.display = 'none';
+                    }
+                }
+                const list = document.getElementById('notifList');
+                if (list) {
+                    if (!data.items || data.items.length === 0) {
+                        list.innerHTML = '<div style="padding:20px; text-align:center; color:#666; font-size:13px;">Нет новых уведомлений</div>';
+                    } else {
+                        list.innerHTML = data.items.map(n => {
+                            const author = `${escapeHtml(n.author_last || '')} ${escapeHtml(n.author_first || n.author_login || '')}`.trim();
+                            return `<div onclick="openNotif(${n.order_id}, ${n.id})"
+                                style="padding:12px 16px; border-bottom:1px solid #2a2d35; cursor:pointer;"
+                                onmouseover="this.style.background='#2a2d35'"
+                                onmouseout="this.style.background='transparent'">
+                                <div style="font-size:13px; color:#e0e0e0; margin-bottom:3px;">
+                                    <strong style="color:#ff6b35;">${author || 'Система'}</strong> · заказ ${escapeHtml(n.order_number || '')}
+                                </div>
+                                <div style="font-size:12px; color:#888;">${escapeHtml(n.text || '')}</div>
+                            </div>`;
+                        }).join('');
+                    }
+                }
+            } catch (e) {}
+        }
+
+        function toggleNotifications(e) {
+            if (e) e.stopPropagation();
+            const d = document.getElementById('notifDropdown');
+            if (!d) return;
+            if (d.style.display === 'block') {
+                d.style.display = 'none';
+            } else {
+                d.style.display = 'block';
+                loadNotifications();
+            }
+        }
+
+        async function openNotif(orderId, notifId) {
+            // Помечаем прочитанным по этому заказу
+            try {
+                await fetch('/api/notifications/read', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ order_id: orderId })
+                });
+            } catch (e) {}
+            document.getElementById('notifDropdown').style.display = 'none';
+            // Переходим в заказ (на страницу фото или текущий шаг)
+            window.location.href = '/?order_id=' + orderId + '&open_chat=1';
+        }
+
+        // Закрытие по клику вне
+        document.addEventListener('click', function(e) {
+            const d = document.getElementById('notifDropdown');
+            if (d && d.style.display === 'block' && !d.contains(e.target)) {
+                d.style.display = 'none';
+            }
+        });
+
+        // Старт polling уведомлений (раз в 15 секунд)
+        document.addEventListener('DOMContentLoaded', function() {
+            loadNotifications();
+            notifPoll = setInterval(loadNotifications, 15000);
+        });                                  
     </script>
     {% block extra_js %}{% endblock %}
 </body>
