@@ -46,3 +46,4 @@ app/static/uploads/temp/
 temp/
 .DS_Store
 Thumbs.db
+private_key.pem

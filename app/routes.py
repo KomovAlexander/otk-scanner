@@ -208,6 +208,51 @@ def check_document_match(order_id: str, found_product: str, doc_number: str) -> 
         return "❌ Документ не соответствует заказу!"
 
 
+def send_web_push_to_user(user_id: int, title: str, body: str, url: str):
+    """Отправляет Web Push всем подпискам пользователя."""
+    import json
+    import os
+    from dotenv import load_dotenv
+    from pywebpush import webpush, WebPushException
+    from app.database import get_push_subscriptions, delete_push_subscription
+
+    load_dotenv()
+    
+    vapid_private = os.getenv("VAPID_PRIVATE_KEY", "").strip('"').strip("'")
+    vapid_subject = os.getenv("VAPID_SUBJECT", "mailto:admin@example.com")
+    
+    if not vapid_private:
+        print("⚠️ VAPID_PRIVATE_KEY не настроен, пуш не отправлен")
+        return
+
+    subs = get_push_subscriptions(user_id)
+    if not subs:
+        return
+
+    payload = json.dumps({
+        "title": title,
+        "body": body,
+        "url": url
+    })
+
+    for sub in subs:
+        try:
+            sub_info = json.loads(sub["subscription_json"])
+            webpush(
+                subscription_info=sub_info,
+                data=payload,
+                vapid_private_key=vapid_private,
+                vapid_claims={"sub": vapid_subject}
+            )
+            print(f"✅ Пуш успешно отправлен для user {user_id}")
+        except WebPushException as ex:
+            print(f"Ошибка пуша для user {user_id}: {ex}")
+            if ex.response and ex.response.status_code == 410:
+                delete_push_subscription(sub["id"])
+        except Exception as e:
+            print(f"Общая ошибка пуша: {e}")
+
+
 def process_document_scan(file_path: str, expected_type: str, order_id_str: str) -> dict:
     from app.patterns import detect_document_type, extract_product_name
 
@@ -1608,7 +1653,8 @@ def api_users_search(request: Request):
     conn = get_db()
     cursor = conn.cursor()
     # Выбираем всех — пользователей немного, фильтруем в Python
-    cursor.execute("SELECT id, login, first_name, last_name, role FROM users ORDER BY last_name, first_name")
+    cursor.execute(
+        "SELECT id, login, first_name, last_name, role FROM users ORDER BY last_name, first_name")
     rows = [dict(r) for r in cursor.fetchall()]
     conn.close()
 
@@ -1690,33 +1736,49 @@ async def api_post_chat(request: Request, order_id: int):
             status_code=400
         )
 
-    from app.database import add_chat_message, add_mention, add_notification, \
-        find_user_by_login_or_name, get_admin_users
+    from app.database import (add_chat_message, add_mention, add_notification, 
+                              find_user_by_login_or_name, get_admin_users, get_db)
 
     rid = add_chat_message(order_id, user["id"], text, photo_path)
 
     # ── Парсинг @-упоминаний ──
     if text:
         import re as _re
-        # Находим все @слово (буквы, цифры, подчёркивание, дефис)
         found = _re.findall(r'@([A-Za-zА-Яа-я0-9_\-]+)', text)
         seen_user_ids = set()
+        
+        # Получаем имя автора и номер заказа для пуша
+        author_name = f"{user.get('last_name','')} {user.get('first_name','')}".strip() or user.get('login','')
+        order_number = ""
+        try:
+            conn_o = get_db()
+            cur_o = conn_o.cursor()
+            cur_o.execute("SELECT order_number FROM orders WHERE id = ?", (order_id,))
+            r_o = cur_o.fetchone()
+            if r_o:
+                order_number = r_o["order_number"]
+            conn_o.close()
+        except Exception:
+            pass
 
         for token in found:
             token_low = token.lower()
 
-            # Группа @админ / @admin → все админы
+            # Группа @админ / @admin
             if token_low in ("админ", "admin", "админы", "admins"):
                 for adm in get_admin_users():
-                    if adm["id"] == user["id"]:
-                        continue  # себя не уведомляем
-                    if adm["id"] in seen_user_ids:
+                    if adm["id"] == user["id"] or adm["id"] in seen_user_ids:
                         continue
                     seen_user_ids.add(adm["id"])
                     add_mention(rid, adm["id"])
-                    add_notification(
-                        adm["id"], order_id, rid,
-                        f"Вас упомянули в чате заказа (группа @{token})"
+                    add_notification(adm["id"], order_id, rid, "Вас упомянули в чате заказа")
+                    
+                    # ОТПРАВКА ПУША
+                    send_web_push_to_user(
+                        adm["id"], 
+                        f"Упоминание: заказ {order_number}", 
+                        f"{author_name}: {text[:50]}...", 
+                        f"/?order_id={order_id}&open_chat=1"
                     )
                 continue
 
@@ -1725,9 +1787,14 @@ async def api_post_chat(request: Request, order_id: int):
             if target and target["id"] != user["id"] and target["id"] not in seen_user_ids:
                 seen_user_ids.add(target["id"])
                 add_mention(rid, target["id"])
-                add_notification(
-                    target["id"], order_id, rid,
-                    f"Вас упомянули в чате заказа"
+                add_notification(target["id"], order_id, rid, "Вас упомянули в чате заказа")
+                
+                # ОТПРАВКА ПУША
+                send_web_push_to_user(
+                    target["id"], 
+                    f"Упоминание: заказ {order_number}", 
+                    f"{author_name}: {text[:50]}...", 
+                    f"/?order_id={order_id}&open_chat=1"
                 )
 
     return JSONResponse({"status": "ok", "id": rid})
@@ -1763,4 +1830,33 @@ async def api_notifications_read(request: Request):
     else:
         mark_notifications_read(user["id"])
 
+    return JSONResponse({"status": "ok"})
+
+# ── Web Push уведомления ────────────────────────────
+
+
+@router.get("/api/push/vapid-public-key")
+def api_vapid_public_key():
+    """Отдаёт публичный VAPID ключ для фронтенда."""
+    import os
+    from dotenv import load_dotenv
+    load_dotenv()
+    pub_key = os.getenv("VAPID_PUBLIC_KEY", "")
+    return JSONResponse({"publicKey": pub_key})
+
+
+@router.post("/api/push/subscribe")
+async def api_push_subscribe(request: Request):
+    """Сохраняет подписку браузера в БД."""
+    user = get_current_user(request)
+    if not user:
+        return JSONResponse({"status": "error"}, status_code=401)
+
+    data = await request.json()
+    if not data or "endpoint" not in data:
+        return JSONResponse({"status": "error", "message": "Нет данных подписки"}, status_code=400)
+
+    import json
+    from app.database import save_push_subscription
+    save_push_subscription(user["id"], json.dumps(data))
     return JSONResponse({"status": "ok"})

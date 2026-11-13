@@ -187,6 +187,16 @@ def init_db():
             FOREIGN KEY (order_id) REFERENCES orders(id)
         )
     """)
+    # Подписки на Web Push уведомления
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS push_subscriptions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            subscription_json TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id)
+        )
+    """)    
     # Добавляем колонку user_id если её нет
     cursor.execute("PRAGMA table_info(orders)")
     columns = [row["name"] for row in cursor.fetchall()]
@@ -831,5 +841,39 @@ def mark_notifications_read(user_id: int, order_id: int = None):
     else:
         cursor.execute(
             "UPDATE notifications SET is_read = 1 WHERE user_id = ?", (user_id,))
+    conn.commit()
+    conn.close()
+
+
+# ─── Функции для работы с Web Push ───
+def save_push_subscription(user_id: int, subscription_json: str):
+    """Сохраняет подписку. Удаляет старую подписку этого пользователя, чтобы не дублировались."""
+    conn = get_db()
+    cursor = conn.cursor()
+    # Удаляем старые подписки этого юзера (на случай переустановки)
+    cursor.execute("DELETE FROM push_subscriptions WHERE user_id = ?", (user_id,))
+    cursor.execute(
+        "INSERT INTO push_subscriptions (user_id, subscription_json) VALUES (?, ?)",
+        (user_id, subscription_json)
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_push_subscriptions(user_id: int) -> list:
+    """Возвращает все подписки пользователя (на случай нескольких устройств)."""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM push_subscriptions WHERE user_id = ?", (user_id,))
+    rows = [dict(r) for r in cursor.fetchall()]
+    conn.close()
+    return rows
+
+
+def delete_push_subscription(sub_id: int):
+    """Удаляет подписку (например, если она устарела)."""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM push_subscriptions WHERE id = ?", (sub_id,))
     conn.commit()
     conn.close()

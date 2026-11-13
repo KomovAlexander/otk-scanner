@@ -254,6 +254,9 @@
             {% if user.role == 'admin' %}
             <a href="/admin">⚙️ Админка</a>
             {% endif %}
+            <a href="javascript:void(0)" onclick="enablePushNotifications()" id="pushBtn" style="color:#2196f3; font-weight:600; display:none;">
+                📱 Включить пуши
+            </a>            
             <a href="javascript:void(0)" onclick="toggleNotifications(event)" style="position:relative;">
                 🔔
                 <span id="notifBadge" style="display:none; position:absolute; top:-6px; right:-8px; background:#f44336; color:#fff; border-radius:10px; padding:1px 6px; font-size:10px; font-weight:700;">0</span>
@@ -553,7 +556,7 @@
                             <strong style="color:#ff6b35;">${escapeHtml(m.last_name || '')} ${escapeHtml(m.first_name || m.login || '')}</strong>
                             · ${formatChatTime(m.created_at)}
                         </div>
-                        ${m.text ? `<div style="background:#2a2d35; padding:9px 13px; border-radius:8px; font-size:14px; white-space:pre-wrap; line-height:1.45;">${escapeHtml(m.text)}</div>` : ''}
+                        ${m.text ? `<div style="background:#2a2d35; padding:9px 13px; border-radius:8px; font-size:14px; white-space:pre-wrap; line-height:1.45;">${linkify(m.text)}</div>` : ''}
                         ${m.photo_path ? `<img src="${m.photo_path}" style="max-width:220px; border-radius:8px; margin-top:6px; cursor:pointer; display:block;" onclick="openLightbox('${m.photo_path}')">` : ''}
                     </div>
                 `).join('') || '<div style="color:#666; text-align:center; padding:40px 0;">Сообщений пока нет. Напишите первым.</div>';
@@ -565,6 +568,24 @@
             if (!str) return '';
             return String(str).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
         }
+        function linkify(text) {
+            // Сначала экранируем весь текст, чтобы убить любой опасный HTML
+            const escaped = escapeHtml(text);
+            
+            // Регулярное выражение для поиска ссылок (http, https, www)
+            const urlRegex = /(\b(https?:\/\/|www\.)[-A-Z0-9+&@#\/%?=~_|!:,.;]*[-A-Z0-9+&@#\/%=~_|])/ig;
+            
+            // Заменяем найденные ссылки на тег <a>
+            return escaped.replace(urlRegex, function(url) {
+                let href = url;
+                // Если ссылка начинается с www, добавляем http:// для корректного перехода
+                if (url.startsWith('www.')) {
+                    href = 'http://' + url;
+                }
+                // target="_blank" открывает в новой вкладке, rel защищает от фишинга
+                return `<a href="${href}" target="_blank" rel="noopener noreferrer" style="color:#2196f3; text-decoration:underline;">${url}</a>`;
+            });
+        }        
         function formatChatTime(utcStr) {
             if (!utcStr) return '';
             // SQLite отдаёт "2026-11-09 12:34:56" — это UTC
@@ -807,7 +828,92 @@
         document.addEventListener('DOMContentLoaded', function() {
             loadNotifications();
             notifPoll = setInterval(loadNotifications, 15000);
-        });                                  
+        });     
+        async function enablePushNotifications() {
+            if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+                showInfoModal('Ваш браузер не поддерживает push-уведомления. На iPhone добавьте сайт на главный экран.', 'Не поддерживается');
+                return;
+            }
+
+            try {
+                let permission = Notification.permission;
+                if (permission !== 'granted') {
+                    permission = await Notification.requestPermission();
+                }
+                
+                if (permission !== 'granted') {
+                    console.log('Пуш: пользователь не разрешил уведомления.');
+                    return;
+                }
+
+                let reg = await navigator.serviceWorker.getRegistration();
+                if (!reg) {
+                    reg = await navigator.serviceWorker.register('/static/sw.js');
+                }
+
+                let subscription = await reg.pushManager.getSubscription();
+                
+                if (!subscription) {
+                    const res = await fetch('/api/push/vapid-public-key');
+                    const keyData = await res.json();
+                    if (!keyData.publicKey) return;
+
+                    subscription = await reg.pushManager.subscribe({
+                        userVisibleOnly: true,
+                        applicationServerKey: (function(b64){
+                            const padding = '='.repeat((4 - b64.length % 4) % 4);
+                            const base64 = (b64 + padding).replace(/\-/g, '+').replace(/_/g, '/');
+                            const raw = window.atob(base64);
+                            const arr = new Uint8Array(raw.length);
+                            for (let i = 0; i < raw.length; ++i) arr[i] = raw.charCodeAt(i);
+                            return arr;
+                        })(keyData.publicKey)
+                    });
+                }
+
+                // Отправляем на сервер
+                await fetch('/api/push/subscribe', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(subscription)
+                });
+
+                // Прячем кнопку, если она была видна
+                const btn = document.getElementById('pushBtn');
+                if (btn) btn.style.display = 'none';
+
+            } catch (e) {
+                console.error('Ошибка при включении уведомлений:', e);
+            }
+        }
+        // Показываем кнопку "Включить пуши", если они ещё не включены
+        document.addEventListener('DOMContentLoaded', async function() {
+            const btn = document.getElementById('pushBtn');
+            if (!btn) return;
+
+            if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+                // Если браузер вообще не поддерживает пуши — кнопку не показываем
+                return;
+            }
+
+            // Проверяем, есть ли уже активная подписка в браузере
+            try {
+                const reg = await navigator.serviceWorker.getRegistration('/static/sw.js');
+                let hasSub = false;
+                if (reg) {
+                    const sub = await reg.pushManager.getSubscription();
+                    if (sub) hasSub = true;
+                }
+                
+                // Если подписки нет, показываем кнопку (на телефонах это критично)
+                if (!hasSub) {
+                    btn.style.display = 'inline-block';
+                }
+            } catch(e) {
+                // Если ошибка — на всякий случай показываем кнопку
+                btn.style.display = 'inline-block';
+            }
+        });                                     
     </script>
     {% block extra_js %}{% endblock %}
 </body>

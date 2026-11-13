@@ -6,6 +6,9 @@ from starlette.middleware.sessions import SessionMiddleware
 from app.routes import router
 from app.database import init_db, create_default_admin
 from app.admin_routes import admin_router
+from dotenv import load_dotenv
+
+load_dotenv()
 
 app = FastAPI(title="ОТК Сканер", version="1.0.0")
 
