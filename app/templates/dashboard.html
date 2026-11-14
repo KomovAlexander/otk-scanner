@@ -122,6 +122,47 @@
         .btn-action { padding: 4px 8px; font-size: 11px; }
         .dashboard-header { flex-direction: column; gap: 12px; }
     }
+    @media (max-width: 768px) {
+        .dashboard-container {
+            padding: 10px; /* Чуть уменьшаем отступы по краям */
+        }
+        
+        /* Центрируем таблицу и не даем ей вылезти за экран */
+        .orders-table {
+            margin: 0 auto; 
+            width: 100%;
+            table-layout: fixed; /* Фиксируем ширину колонок, чтобы они не расползались */
+        }
+
+        /* Уменьшаем шрифт и отступы внутри ячеек */
+        .orders-table th, 
+        .orders-table td {
+            padding: 8px 6px;
+            font-size: 12px;
+            word-wrap: break-word; /* Переносим длинные слова, если не влезают */
+        }
+
+        /* Уменьшаем кнопки, чтобы они влезали в узкие колонки */
+        .btn-action {
+            padding: 4px 6px;
+            font-size: 10px;
+            margin: 2px 0;
+            display: block; /* Кнопки встанут друг под другом */
+            text-align: center;
+        }
+
+        /* Даем колонкам правильные пропорции */
+        .orders-table th:nth-child(1) { width: 25%; } /* Заказ */
+        .orders-table th:nth-child(2) { width: 25%; } /* Изделие (чуть уменьшили) */
+        .orders-table th:nth-child(3) { width: 25%; } /* Статус (увеличили) */
+        .orders-table th:nth-child(4) { width: 25%; } /* Действия */
+        
+        .status-badge {
+            white-space: nowrap; /* Запрещаем перенос текста внутри бейджа */
+            padding: 4px 6px; /* Чуть уменьшаем отступы */
+            font-size: 11px; /* Чуть уменьшаем шрифт для надежности */
+        }        
+    }    
 </style>
 {% endblock %}
 

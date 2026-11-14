@@ -569,23 +569,24 @@
             return String(str).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
         }
         function linkify(text) {
-            // Сначала экранируем весь текст, чтобы убить любой опасный HTML
             const escaped = escapeHtml(text);
-            
-            // Регулярное выражение для поиска ссылок (http, https, www)
             const urlRegex = /(\b(https?:\/\/|www\.)[-A-Z0-9+&@#\/%?=~_|!:,.;]*[-A-Z0-9+&@#\/%=~_|])/ig;
             
-            // Заменяем найденные ссылки на тег <a>
             return escaped.replace(urlRegex, function(url) {
                 let href = url;
-                // Если ссылка начинается с www, добавляем http:// для корректного перехода
                 if (url.startsWith('www.')) {
                     href = 'http://' + url;
                 }
-                // target="_blank" открывает в новой вкладке, rel защищает от фишинга
-                return `<a href="${href}" target="_blank" rel="noopener noreferrer" style="color:#2196f3; text-decoration:underline;">${url}</a>`;
+                
+                // Если ссылка длинная, визуально сокращаем её
+                let displayUrl = url;
+                if (url.length > 40) {
+                    displayUrl = url.substring(0, 30) + '...';
+                }
+                
+                return `<a href="${href}" target="_blank" rel="noopener noreferrer" title="${url}" style="color:#2196f3; text-decoration:underline; word-break: break-all;">${displayUrl}</a>`;
             });
-        }        
+        }    
         function formatChatTime(utcStr) {
             if (!utcStr) return '';
             // SQLite отдаёт "2026-11-09 12:34:56" — это UTC

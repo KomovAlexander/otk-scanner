@@ -847,11 +847,31 @@ def mark_notifications_read(user_id: int, order_id: int = None):
 
 # ─── Функции для работы с Web Push ───
 def save_push_subscription(user_id: int, subscription_json: str):
-    """Сохраняет подписку. Удаляет старую подписку этого пользователя, чтобы не дублировались."""
+    """Сохраняет подписку. Если такая подписка (по endpoint) уже есть, обновляет её user_id."""
+    import json
     conn = get_db()
     cursor = conn.cursor()
-    # Удаляем старые подписки этого юзера (на случай переустановки)
-    cursor.execute("DELETE FROM push_subscriptions WHERE user_id = ?", (user_id,))
+    
+    try:
+        # Достаем endpoint из JSON
+        sub_data = json.loads(subscription_json)
+        endpoint = sub_data.get("endpoint", "")
+    except Exception:
+        endpoint = ""
+        
+    if endpoint:
+        # Ищем, есть ли уже подписка с таким endpoint
+        cursor.execute("SELECT id FROM push_subscriptions WHERE subscription_json LIKE ?", (f'%{endpoint}%',))
+        existing = cursor.fetchone()
+        
+        if existing:
+            # Если есть — просто обновляем user_id (подписка переходит к новому юзеру)
+            cursor.execute("UPDATE push_subscriptions SET user_id = ? WHERE id = ?", (user_id, existing["id"]))
+            conn.commit()
+            conn.close()
+            return
+
+    # Если подписки с таким endpoint нет — создаем новую
     cursor.execute(
         "INSERT INTO push_subscriptions (user_id, subscription_json) VALUES (?, ?)",
         (user_id, subscription_json)
